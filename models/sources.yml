@@ -1,0 +1,33 @@
+version: 2
+
+sources:
+  - name: raw_market
+    database: YOUR_GCP_PROJECT_ID
+    schema: raw_market
+    description: Raw layer ingested from Python notebook using yfinance and BigQuery client uploads.
+    tables:
+      - name: stock_prices
+        description: Raw local-currency stock price history for user-selected Argentine tickers.
+        columns:
+          - name: date
+            tests:
+              - not_null
+          - name: ticker
+            tests:
+              - not_null
+          - name: close
+            tests:
+              - not_null
+
+      - name: factor_prices
+        description: Long-format macro and risk-factor prices (MERVAL, USDARS, VIX, EEM, US10Y).
+        columns:
+          - name: date
+            tests:
+              - not_null
+          - name: factor_name
+            tests:
+              - not_null
+          - name: value
+            tests:
+              - not_null

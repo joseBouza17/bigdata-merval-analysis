@@ -1,0 +1,23 @@
+merval_argentina_profile:
+  target: dev_adc
+  outputs:
+    dev_adc:
+      type: bigquery
+      method: oauth
+      project: YOUR_GCP_PROJECT_ID
+      dataset: YOUR_BIGQUERY_DATASET
+      threads: 4
+      location: US
+      priority: interactive
+      timeout_seconds: 300
+
+    dev_service_account:
+      type: bigquery
+      method: service-account
+      project: YOUR_GCP_PROJECT_ID
+      dataset: YOUR_BIGQUERY_DATASET
+      threads: 4
+      location: US
+      keyfile: YOUR_SERVICE_ACCOUNT_JSON_PATH
+      priority: interactive
+      timeout_seconds: 300

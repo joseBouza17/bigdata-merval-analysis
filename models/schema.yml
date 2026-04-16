@@ -1,0 +1,59 @@
+version: 2
+
+models:
+  - name: stg_stock_prices
+    description: Staging stock price model from raw_market.stock_prices.
+    columns:
+      - name: date
+        tests:
+          - not_null
+      - name: ticker
+        tests:
+          - not_null
+      - name: close
+        tests:
+          - not_null
+
+  - name: stg_factor_prices
+    description: Staging factor price model from raw_market.factor_prices.
+    columns:
+      - name: date
+        tests:
+          - not_null
+      - name: factor_name
+        tests:
+          - not_null
+      - name: factor_value
+        tests:
+          - not_null
+
+  - name: int_asset_returns
+    description: Intermediate daily log returns model.
+    columns:
+      - name: ticker
+        tests:
+          - not_null
+      - name: date
+        tests:
+          - not_null
+
+  - name: mart_stock_metrics
+    description: Annualized stock-level return, volatility and Sharpe ratio.
+    columns:
+      - name: ticker
+        tests:
+          - not_null
+          - unique
+      - name: observations
+        tests:
+          - not_null
+
+  - name: mart_portfolio_scenarios
+    description: Portfolio return time series and summary metrics.
+    columns:
+      - name: date
+        tests:
+          - not_null
+      - name: portfolio_return
+        tests:
+          - not_null

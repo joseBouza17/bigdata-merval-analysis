@@ -1,0 +1,29 @@
+name: merval_argentina_dbt
+version: 1.0.0
+config-version: 2
+
+profile: merval_argentina_profile
+
+model-paths: ["models"]
+analysis-paths: ["analyses"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+
+target-path: target
+clean-targets:
+  - target
+  - dbt_packages
+
+models:
+  merval_argentina_dbt:
+    +materialized: view
+    staging:
+      +schema: processed_market
+    intermediate:
+      +schema: processed_market
+      +materialized: table
+    marts:
+      +schema: analytics_market
+      +materialized: table
