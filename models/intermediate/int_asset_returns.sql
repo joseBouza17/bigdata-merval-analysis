@@ -15,10 +15,12 @@ returns as (
         ticker,
         close,
         case
-            when prev_close is null or prev_close = 0 then null
+            when close is null or close <= 0 then null
+            when prev_close is null or prev_close <= 0 then null
             else ln(close / prev_close)
         end as log_return
     from priced
 )
 select *
 from returns
+where log_return is not null
