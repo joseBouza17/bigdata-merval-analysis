@@ -2,7 +2,6 @@ version: 2
 
 sources:
   - name: raw_market
-    database: bigdata-financeargentina
     schema: raw_market
     description: Raw layer ingested from Python notebook using yfinance and BigQuery client uploads.
     tables:
@@ -29,5 +28,77 @@ sources:
             tests:
               - not_null
           - name: value
+            tests:
+              - not_null
+
+  - name: processed_market
+    schema: processed_market
+    description: Processed layer produced by the ETL notebook and reusable in downstream dbt models.
+    tables:
+      - name: asset_returns
+        description: Daily stock return features used for portfolio analytics and Monte Carlo simulation inputs.
+        columns:
+          - name: date
+            tests:
+              - not_null
+          - name: ticker
+            tests:
+              - not_null
+          - name: log_return
+            tests:
+              - not_null
+
+      - name: factor_returns
+        description: Daily factor return table for MERVAL, FX, EEM, VIX, and risk-free signals.
+        columns:
+          - name: date
+            tests:
+              - not_null
+
+      - name: stock_metrics
+        description: Stock-level annualized return and risk metrics.
+        columns:
+          - name: ticker
+            tests:
+              - not_null
+
+      - name: beta_metrics
+        description: Beta estimates of each stock versus MERVAL and other benchmarks.
+        columns:
+          - name: ticker
+            tests:
+              - not_null
+
+      - name: correlation_matrix_long
+        description: Long-form pairwise correlation table used for diversification and FX sensitivity analysis.
+        columns:
+          - name: ticker_1
+            tests:
+              - not_null
+          - name: ticker_2
+            tests:
+              - not_null
+
+  - name: analytics_market
+    schema: analytics_market
+    description: Serving layer produced by the post-ETL notebook and exposed to reporting or dashboards.
+    tables:
+      - name: portfolio_scenarios
+        description: Portfolio-level risk and classification summary for a notebook run.
+        columns:
+          - name: portfolio_id
+            tests:
+              - not_null
+          - name: run_id
+            tests:
+              - not_null
+
+      - name: monte_carlo_summary
+        description: Monte Carlo summary metrics for portfolio downside and scenario analysis.
+        columns:
+          - name: portfolio_id
+            tests:
+              - not_null
+          - name: run_id
             tests:
               - not_null

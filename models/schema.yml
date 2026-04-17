@@ -27,6 +27,19 @@ models:
         tests:
           - not_null
 
+  - name: stg_asset_returns
+    description: Cleaned asset returns from processed_market.asset_returns for downstream portfolio models.
+    columns:
+      - name: date
+        tests:
+          - not_null
+      - name: ticker
+        tests:
+          - not_null
+      - name: log_return
+        tests:
+          - not_null
+
   - name: int_asset_returns
     description: Intermediate daily log returns model.
     columns:
@@ -34,6 +47,25 @@ models:
         tests:
           - not_null
       - name: date
+        tests:
+          - not_null
+
+  - name: int_portfolio_metrics
+    description: Intermediate weighted portfolio return series and summary metrics.
+    columns:
+      - name: date
+        tests:
+          - not_null
+      - name: portfolio_return
+        tests:
+          - not_null
+      - name: portfolio_volatility
+        tests:
+          - not_null
+          - accepted_range:
+              arguments:
+                min_value: 0
+      - name: weighted_sharpe
         tests:
           - not_null
 
@@ -51,11 +83,44 @@ models:
   - name: mart_portfolio_scenarios
     description: Portfolio return time series and summary metrics.
     columns:
+      - name: portfolio_id
+        tests:
+          - not_null
       - name: date
         tests:
           - not_null
       - name: portfolio_return
         tests:
-          - not_null:
-              config:
-                where: "date != (select min(date) from raw_market_analytics_market.mart_portfolio_scenarios)"
+          - not_null
+      - name: portfolio_volatility
+        tests:
+          - not_null
+          - accepted_range:
+              arguments:
+                min_value: 0
+      - name: weighted_sharpe
+        tests:
+          - not_null
+
+  - name: mart_monte_carlo_summary
+    description: Serving-layer Monte Carlo summary enriched with portfolio context.
+    columns:
+      - name: portfolio_id
+        tests:
+          - not_null
+      - name: run_id
+        tests:
+          - not_null
+      - name: probability_of_loss
+        tests:
+          - not_null
+          - accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+      - name: var_95
+        tests:
+          - not_null
+      - name: cvar_95
+        tests:
+          - not_null

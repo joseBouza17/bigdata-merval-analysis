@@ -1,36 +1,32 @@
 -- Mart model: example portfolio scenario output from dbt.
 -- Uses configurable weights through dbt vars for reproducibility.
 
-{% set w_ggal = var('w_ggal', 0.25) %}
-{% set w_ypfd = var('w_ypfd', 0.25) %}
-{% set w_pamp = var('w_pamp', 0.20) %}
-{% set w_bma = var('w_bma', 0.15) %}
-{% set w_cepu = var('w_cepu', 0.15) %}
+{% set portfolio_id = var('portfolio_id', 'portfolio_dbt_default') %}
 
-with selected as (
-    select date, ticker, log_return
-    from {{ ref('int_asset_returns') }}
-    where ticker in ('GGAL.BA', 'YPFD.BA', 'PAMP.BA', 'BMA.BA', 'CEPU.BA')
-),
-weighted as (
+with metrics as (
     select
         date,
-        sum(
-            case ticker
-                when 'GGAL.BA' then log_return * {{ w_ggal }}
-                when 'YPFD.BA' then log_return * {{ w_ypfd }}
-                when 'PAMP.BA' then log_return * {{ w_pamp }}
-                when 'BMA.BA' then log_return * {{ w_bma }}
-                when 'CEPU.BA' then log_return * {{ w_cepu }}
-                else 0
-            end
-        ) as portfolio_return
-    from selected
-    group by date
+        portfolio_return,
+        expected_portfolio_return,
+        portfolio_volatility,
+        weighted_sharpe
+    from {{ ref('int_portfolio_metrics') }}
+),
+portfolio_rollup as (
+    select
+        '{{ portfolio_id }}' as portfolio_id,
+        date,
+        portfolio_return,
+        expected_portfolio_return,
+        portfolio_volatility,
+        weighted_sharpe
+    from metrics
 )
 select
+    portfolio_id,
     date,
     portfolio_return,
-    avg(portfolio_return) over () * 252 as expected_portfolio_return,
-    stddev(portfolio_return) over () * sqrt(252) as portfolio_volatility
-from weighted
+    expected_portfolio_return,
+    portfolio_volatility,
+    weighted_sharpe
+from portfolio_rollup
