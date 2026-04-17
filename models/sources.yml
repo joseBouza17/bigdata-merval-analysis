@@ -2,7 +2,7 @@ version: 2
 
 sources:
   - name: raw_market
-    database: YOUR_GCP_PROJECT_ID
+    database: bigdata-financeargentina
     schema: raw_market
     description: Raw layer ingested from Python notebook using yfinance and BigQuery client uploads.
     tables:

@@ -4,8 +4,8 @@ merval_argentina_profile:
     dev_adc:
       type: bigquery
       method: oauth
-      project: YOUR_GCP_PROJECT_ID
-      dataset: YOUR_BIGQUERY_DATASET
+      project: bigdata-financeargentina
+      dataset: raw_market
       threads: 4
       location: US
       priority: interactive
@@ -14,8 +14,8 @@ merval_argentina_profile:
     dev_service_account:
       type: bigquery
       method: service-account
-      project: YOUR_GCP_PROJECT_ID
-      dataset: YOUR_BIGQUERY_DATASET
+      project: bigdata-financeargentina
+      dataset: raw_market
       threads: 4
       location: US
       keyfile: YOUR_SERVICE_ACCOUNT_JSON_PATH
