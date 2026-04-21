@@ -1,6 +1,3 @@
--- Mart model: dashboard-ready Monte Carlo summary enriched with portfolio context.
--- This model expects the notebook to have already written analytics_market source tables.
-
 with monte_carlo as (
     select
         portfolio_id,
@@ -21,19 +18,30 @@ with monte_carlo as (
         var_95,
         cvar_95,
         ingestion_timestamp
-    from {{ source('analytics_market', 'monte_carlo_summary') }}
+    from {{ ref('stg_monte_carlo_summary') }}
 ),
 portfolio_context as (
     select
         portfolio_id,
         run_id,
-        expected_portfolio_return,
-        portfolio_volatility,
-        weighted_beta_merval,
-        weighted_sharpe,
         portfolio_type,
-        portfolio_type_reason
-    from {{ source('analytics_market', 'portfolio_scenarios') }}
+        portfolio_type_reason,
+        dbt_expected_portfolio_return,
+        dbt_portfolio_volatility,
+        dbt_weighted_beta_merval,
+        dbt_weighted_beta_eem,
+        dbt_weighted_sharpe,
+        dbt_max_drawdown,
+        dbt_effective_number_of_assets,
+        dbt_average_pairwise_correlation,
+        dbt_diversification_ratio
+    from {{ ref('mart_portfolio_scenarios') }}
+),
+risk_breakdown as (
+    select
+        portfolio_id,
+        dbt_risk_profile
+    from {{ ref('mart_portfolio_risk_breakdown') }}
 )
 select
     m.portfolio_id,
@@ -53,14 +61,22 @@ select
     m.expected_return_simulated,
     m.var_95,
     m.cvar_95,
-    p.expected_portfolio_return,
-    p.portfolio_volatility,
-    p.weighted_beta_merval,
-    p.weighted_sharpe,
+    p.dbt_expected_portfolio_return,
+    p.dbt_portfolio_volatility,
+    p.dbt_weighted_beta_merval,
+    p.dbt_weighted_beta_eem,
+    p.dbt_weighted_sharpe,
+    p.dbt_max_drawdown,
+    p.dbt_effective_number_of_assets,
+    p.dbt_average_pairwise_correlation,
+    p.dbt_diversification_ratio,
     p.portfolio_type,
     p.portfolio_type_reason,
+    r.dbt_risk_profile,
     m.ingestion_timestamp
 from monte_carlo as m
 left join portfolio_context as p
     on m.portfolio_id = p.portfolio_id
    and m.run_id = p.run_id
+left join risk_breakdown as r
+    on m.portfolio_id = r.portfolio_id

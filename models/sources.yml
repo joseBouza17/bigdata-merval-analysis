@@ -3,102 +3,271 @@ version: 2
 sources:
   - name: raw_market
     schema: raw_market
-    description: Raw layer ingested from Python notebook using yfinance and BigQuery client uploads.
+    description: >
+      Raw market ingestion layer loaded by the Python ETL notebook. These tables preserve the
+      original warehouse landing structure for Argentine equity prices and macro or benchmark
+      factor series before dbt applies standardization and downstream serving logic.
     tables:
       - name: stock_prices
-        description: Raw local-currency stock price history for user-selected Argentine tickers.
+        description: >
+          Raw daily price history for selected Argentine equities in local market currency. This
+          table is the warehouse entrypoint for price, volume, and ingestion metadata.
         columns:
           - name: date
+            description: Trading date of the market observation.
             tests:
               - not_null
           - name: ticker
+            description: Exchange ticker symbol used as the stock identifier across the project.
             tests:
               - not_null
           - name: close
+            description: Raw closing price used by the notebook ETL and dbt reconciliation models.
             tests:
               - not_null
+          - name: ingestion_timestamp
+            description: Timestamp when the notebook loaded the row into BigQuery.
+          - name: run_id
+            description: Notebook execution identifier for repeatable uploads.
 
       - name: factor_prices
-        description: Long-format macro and risk-factor prices (MERVAL, USDARS, VIX, EEM, US10Y).
+        description: >
+          Raw long-format factor and benchmark price series including MERVAL, FX, and global risk
+          proxies used to derive factor returns and macro-sensitive portfolio indicators.
         columns:
           - name: date
+            description: Trading date of the factor observation.
             tests:
               - not_null
           - name: factor_name
+            description: Factor identifier such as MERVAL, USDARS, VIX, EEM, or related macro proxies.
             tests:
               - not_null
           - name: value
+            description: Raw factor level used by the notebook to derive factor returns.
             tests:
               - not_null
+          - name: ingestion_timestamp
+            description: Timestamp when the notebook loaded the factor row into BigQuery.
 
   - name: processed_market
     schema: processed_market
-    description: Processed layer produced by the ETL notebook and reusable in downstream dbt models.
+    description: >
+      Notebook-produced processed financial tables. In the redesigned workflow these are treated as
+      governed upstream contracts: dbt stages, tests, enriches, and serves them rather than merely
+      documenting them.
     tables:
       - name: asset_returns
-        description: Daily stock return features used for portfolio analytics and Monte Carlo simulation inputs.
+        description: >
+          Cleaned stock-level return table produced by the ETL notebook, including local returns,
+          USD-adjusted returns, excess returns, and aligned market-factor features.
+        tests:
+          - unique_combination_of_columns:
+              arguments:
+                combination_of_columns: ['date', 'ticker']
         columns:
           - name: date
+            description: Trading date of the processed return observation.
             tests:
               - not_null
           - name: ticker
+            description: Stock identifier at the daily asset-return grain.
             tests:
               - not_null
           - name: log_return
+            description: Daily log return used as the main portfolio aggregation measure in dbt.
             tests:
               - not_null
+          - name: usd_adjusted_return
+            description: Daily return adjusted for FX effects to support Argentina-specific investor analysis.
+          - name: excess_return
+            description: Daily return in excess of the risk-free benchmark.
 
       - name: factor_returns
-        description: Daily factor return table for MERVAL, FX, EEM, VIX, and risk-free signals.
+        description: >
+          Daily factor return series produced by the notebook from the raw factor-price inputs.
+          dbt stages and summarizes these factor returns for downstream exposure and regime analysis.
+        tests:
+          - unique_combination_of_columns:
+              arguments:
+                combination_of_columns: ['date', 'factor_name']
         columns:
           - name: date
+            description: Trading date of the factor return observation.
+            tests:
+              - not_null
+          - name: factor_name
+            description: Factor identifier for the return series.
+            tests:
+              - not_null
+          - name: factor_return
+            description: Daily factor return used in downstream factor summaries and portfolio context.
             tests:
               - not_null
 
       - name: stock_metrics
-        description: Stock-level annualized return and risk metrics.
+        description: >
+          Notebook-produced stock-level risk and return summary metrics used as reusable building
+          blocks for rankings, portfolio risk decomposition, and investor-facing stock summaries.
+        tests:
+          - unique_combination_of_columns:
+              arguments:
+                combination_of_columns: ['ticker']
         columns:
           - name: ticker
+            description: Unique stock identifier for the metric summary row.
             tests:
               - not_null
+          - name: volatility
+            description: Annualized stock volatility estimate.
+            tests:
+              - accepted_range:
+                  arguments:
+                    min_value: 0
+          - name: corr_with_merval
+            description: Historical correlation between the stock and MERVAL.
+            tests:
+              - accepted_range:
+                  arguments:
+                    min_value: -1
+                    max_value: 1
+          - name: corr_with_fx
+            description: Historical correlation between the stock and the USDARS factor.
+            tests:
+              - accepted_range:
+                  arguments:
+                    min_value: -1
+                    max_value: 1
+          - name: max_drawdown
+            description: Worst historical peak-to-trough decline for the stock.
+            tests:
+              - accepted_range:
+                  arguments:
+                    min_value: -1
+                    max_value: 0
 
       - name: beta_metrics
-        description: Beta estimates of each stock versus MERVAL and other benchmarks.
+        description: >
+          Notebook-produced beta coefficients by stock against key benchmarks. This source now feeds
+          portfolio factor-exposure, risk-breakdown, and enriched stock marts downstream.
+        tests:
+          - unique_combination_of_columns:
+              arguments:
+                combination_of_columns: ['ticker']
         columns:
           - name: ticker
+            description: Unique stock identifier for the beta estimate row.
             tests:
               - not_null
+          - name: beta_vs_merval
+            description: Estimated beta of the stock relative to MERVAL.
+          - name: beta_vs_eem
+            description: Estimated beta of the stock relative to EEM as an external market proxy.
 
       - name: correlation_matrix_long
-        description: Long-form pairwise correlation table used for diversification and FX sensitivity analysis.
+        description: >
+          Long-form correlation matrix across the portfolio universe. dbt canonicalizes this source
+          into unique unordered ticker pairs and uses it for diversification and covariance-based risk
+          metrics.
+        tests:
+          - unique_combination_of_columns:
+              arguments:
+                combination_of_columns: ['ticker_1', 'ticker_2']
         columns:
           - name: ticker_1
+            description: First asset identifier in the correlation pair.
             tests:
               - not_null
           - name: ticker_2
+            description: Second asset identifier in the correlation pair.
             tests:
               - not_null
+          - name: correlation
+            description: Pairwise historical correlation coefficient between the two assets.
+            tests:
+              - accepted_range:
+                  arguments:
+                    min_value: -1
+                    max_value: 1
 
   - name: analytics_market
     schema: analytics_market
-    description: Serving layer produced by the post-ETL notebook and exposed to reporting or dashboards.
+    description: >
+      Notebook-produced analytics outputs such as scenario summaries and Monte Carlo simulation
+      results. In the redesigned project dbt stages and enriches these outputs into serving marts
+      rather than exposing them directly.
     tables:
       - name: portfolio_scenarios
-        description: Portfolio-level risk and classification summary for a notebook run.
+        description: >
+          Notebook summary of a portfolio run including classification, weighted beta, drawdown,
+          concentration, and diversification indicators.
+        tests:
+          - unique_combination_of_columns:
+              arguments:
+                combination_of_columns: ['portfolio_id', 'run_id']
         columns:
           - name: portfolio_id
+            description: Business identifier of the portfolio scenario being evaluated.
             tests:
               - not_null
           - name: run_id
+            description: Unique notebook execution identifier for the scenario summary.
             tests:
               - not_null
+          - name: portfolio_volatility
+            description: Annualized portfolio volatility estimate from the analytics notebook.
+            tests:
+              - accepted_range:
+                  arguments:
+                    min_value: 0
+          - name: concentration_risk_hhi
+            description: Herfindahl-Hirschman concentration measure for the portfolio weight distribution.
+            tests:
+              - accepted_range:
+                  arguments:
+                    min_value: 0
+                    max_value: 1
+          - name: num_assets
+            description: Number of assets included in the evaluated portfolio.
+            tests:
+              - accepted_range:
+                  arguments:
+                    min_value: 1
 
       - name: monte_carlo_summary
-        description: Monte Carlo summary metrics for portfolio downside and scenario analysis.
+        description: >
+          Notebook-generated Monte Carlo summary table containing simulation-based downside risk
+          statistics such as VaR, CVaR, and probability of loss.
+        tests:
+          - unique_combination_of_columns:
+              arguments:
+                combination_of_columns: ['portfolio_id', 'run_id']
         columns:
           - name: portfolio_id
+            description: Business identifier of the simulated portfolio.
             tests:
               - not_null
           - name: run_id
+            description: Unique notebook execution identifier for the simulation summary.
             tests:
               - not_null
+          - name: probability_of_loss
+            description: Share of simulations ending below the initial portfolio value.
+            tests:
+              - not_null
+              - accepted_range:
+                  arguments:
+                    min_value: 0
+                    max_value: 1
+          - name: num_simulations
+            description: Number of Monte Carlo paths generated by the notebook.
+            tests:
+              - accepted_range:
+                  arguments:
+                    min_value: 1
+          - name: simulation_days
+            description: Forecast horizon of the simulation in trading days.
+            tests:
+              - accepted_range:
+                  arguments:
+                    min_value: 1

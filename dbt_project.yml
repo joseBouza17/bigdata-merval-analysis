@@ -19,6 +19,9 @@ clean-targets:
 models:
   merval_argentina_dbt:
     +materialized: view
+    +persist_docs:
+      relation: true
+      columns: true
     staging:
       +schema: processed_market
     intermediate:

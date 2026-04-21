@@ -1,0 +1,19 @@
+select
+    portfolio_id,
+    expected_portfolio_return,
+    portfolio_volatility,
+    weighted_sharpe,
+    max_drawdown,
+    num_assets,
+    weighted_beta_merval,
+    weighted_beta_eem,
+    weight_concentration_hhi,
+    effective_number_of_assets,
+    average_pairwise_correlation,
+    diversification_ratio,
+    portfolio_volatility_from_covariance,
+    exposure_merval,
+    exposure_eem,
+    exposure_usdars,
+    dbt_risk_profile
+from {{ ref('int_risk_breakdown') }}

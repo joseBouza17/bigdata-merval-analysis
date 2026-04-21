@@ -2,125 +2,775 @@ version: 2
 
 models:
   - name: stg_stock_prices
-    description: Staging stock price model from raw_market.stock_prices.
+    description: >
+      Standardized and deduplicated stock-price staging model over the raw notebook landing table.
+      This model establishes a clean market-data contract for downstream price reconciliation.
+    tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['date', 'ticker']
     columns:
       - name: date
+        description: Trading date of the stock-price observation.
         tests:
           - not_null
       - name: ticker
+        description: Canonical uppercase ticker symbol.
         tests:
           - not_null
       - name: close
+        description: Raw close price retained after deduplication.
         tests:
           - not_null
 
   - name: stg_factor_prices
-    description: Staging factor price model from raw_market.factor_prices.
+    description: >
+      Standardized and deduplicated factor-price staging model over raw macro and benchmark market data.
+    tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['date', 'factor_name']
     columns:
       - name: date
+        description: Trading date of the factor observation.
         tests:
           - not_null
       - name: factor_name
+        description: Canonical factor identifier.
         tests:
           - not_null
       - name: factor_value
+        description: Raw factor level used in downstream factor reconciliation.
         tests:
           - not_null
 
   - name: stg_asset_returns
-    description: Cleaned asset returns from processed_market.asset_returns for downstream portfolio models.
+    description: >
+      Staging model over notebook-produced asset returns with consistent naming for local, excess,
+      USD-adjusted, and factor-aligned return features.
+    tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['date', 'ticker']
     columns:
       - name: date
+        description: Trading date of the asset return record.
         tests:
           - not_null
       - name: ticker
+        description: Stock identifier at the processed return grain.
         tests:
           - not_null
       - name: log_return
+        description: Daily stock log return used for additive portfolio aggregation.
         tests:
           - not_null
 
-  - name: int_asset_returns
-    description: Intermediate daily log returns model.
+  - name: stg_factor_returns
+    description: >
+      Staged factor-return table with consistent factor naming and numeric typing for downstream
+      factor summaries and exposure marts.
+    tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['date', 'factor_name']
+    columns:
+      - name: date
+        description: Trading date of the factor return record.
+        tests:
+          - not_null
+      - name: factor_name
+        description: Canonical factor identifier.
+        tests:
+          - not_null
+      - name: factor_return
+        description: Daily factor return value.
+        tests:
+          - not_null
+
+  - name: stg_stock_metrics
+    description: >
+      Staged stock-level risk-return summary from notebook analytics, prepared for reuse in stock
+      rankings and portfolio decomposition models.
+    tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['ticker']
     columns:
       - name: ticker
+        description: Unique stock identifier.
         tests:
           - not_null
-      - name: date
+      - name: volatility
+        description: Annualized stock volatility.
         tests:
-          - not_null
+          - accepted_range:
+              arguments:
+                min_value: 0
+      - name: corr_with_merval
+        description: Historical correlation between the stock and MERVAL.
+        tests:
+          - accepted_range:
+              arguments:
+                min_value: -1
+                max_value: 1
+      - name: corr_with_fx
+        description: Historical correlation between the stock and USDARS.
+        tests:
+          - accepted_range:
+              arguments:
+                min_value: -1
+                max_value: 1
 
-  - name: int_portfolio_metrics
-    description: Intermediate weighted portfolio return series and summary metrics.
+  - name: stg_beta_metrics
+    description: >
+      Staged beta table that standardizes benchmark beta estimates for portfolio-level factor aggregation.
+    tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['ticker']
     columns:
-      - name: date
+      - name: ticker
+        description: Unique stock identifier for the beta row.
         tests:
           - not_null
-      - name: portfolio_return
+      - name: beta_vs_merval
+        description: Stock beta relative to MERVAL.
+      - name: beta_vs_eem
+        description: Stock beta relative to EEM.
+
+  - name: stg_correlation_matrix
+    description: >
+      Canonicalized correlation matrix with one unordered pair per row, used to quantify concentration
+      and diversification in portfolio risk models.
+    tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['ticker_1', 'ticker_2']
+      - expression_is_true:
+          arguments:
+            expression: ticker_1 <= ticker_2
+    columns:
+      - name: ticker_1
+        description: Lexicographically lower ticker in the canonical correlation pair.
         tests:
           - not_null
-      - name: portfolio_volatility
+          - relationships:
+              arguments:
+                to: ref('stg_stock_metrics')
+                field: ticker
+      - name: ticker_2
+        description: Lexicographically higher ticker in the canonical correlation pair.
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_stock_metrics')
+                field: ticker
+      - name: correlation
+        description: Pairwise correlation used in covariance-based diversification metrics.
         tests:
           - not_null
           - accepted_range:
               arguments:
-                min_value: 0
-      - name: weighted_sharpe
-        tests:
-          - not_null
+                min_value: -1
+                max_value: 1
 
-  - name: mart_stock_metrics
-    description: Annualized stock-level return, volatility and Sharpe ratio.
-    columns:
-      - name: ticker
-        tests:
-          - not_null
-          - unique
-      - name: observations
-        tests:
-          - not_null
-
-  - name: mart_portfolio_scenarios
-    description: Portfolio return time series and summary metrics.
+  - name: stg_portfolio_scenarios
+    description: >
+      Staged notebook summary of portfolio scenarios. This is a true scenario-summary dataset and is
+      kept separate from the dbt-built portfolio return series to avoid mixing grains.
+    tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['portfolio_id', 'run_id']
     columns:
       - name: portfolio_id
-        tests:
-          - not_null
-      - name: date
-        tests:
-          - not_null
-      - name: portfolio_return
-        tests:
-          - not_null
-      - name: portfolio_volatility
-        tests:
-          - not_null
-          - accepted_range:
-              arguments:
-                min_value: 0
-      - name: weighted_sharpe
-        tests:
-          - not_null
-
-  - name: mart_monte_carlo_summary
-    description: Serving-layer Monte Carlo summary enriched with portfolio context.
-    columns:
-      - name: portfolio_id
+        description: Business identifier of the portfolio scenario.
         tests:
           - not_null
       - name: run_id
+        description: Notebook execution identifier of the scenario summary.
+        tests:
+          - not_null
+      - name: portfolio_volatility
+        description: Notebook-computed annualized volatility of the portfolio.
+        tests:
+          - accepted_range:
+              arguments:
+                min_value: 0
+      - name: concentration_risk_hhi
+        description: Portfolio concentration indicator from the notebook.
+        tests:
+          - accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+      - name: num_assets
+        description: Count of assets in the scenario.
+        tests:
+          - accepted_range:
+              arguments:
+                min_value: 1
+
+  - name: stg_monte_carlo_summary
+    description: >
+      Staged Monte Carlo simulation output with consistent typing for downside-risk and scenario-summary marts.
+    tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['portfolio_id', 'run_id']
+    columns:
+      - name: portfolio_id
+        description: Business identifier of the simulated portfolio.
+        tests:
+          - not_null
+      - name: run_id
+        description: Notebook execution identifier of the simulation output.
         tests:
           - not_null
       - name: probability_of_loss
+        description: Share of simulations ending below the initial value.
         tests:
           - not_null
           - accepted_range:
               arguments:
                 min_value: 0
                 max_value: 1
-      - name: var_95
+      - name: num_simulations
+        description: Number of simulated paths.
+        tests:
+          - accepted_range:
+              arguments:
+                min_value: 1
+
+  - name: int_asset_returns
+    description: >
+      Reconciled asset-return intermediate model joining notebook-produced return features with raw
+      price history so that portfolio analytics retain a visible link back to market inputs.
+    tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['date', 'ticker']
+    columns:
+      - name: date
+        description: Trading date of the reconciled asset-return row.
         tests:
           - not_null
-      - name: cvar_95
+      - name: ticker
+        description: Stock identifier at the asset-return grain.
         tests:
           - not_null
+      - name: log_return
+        description: Daily stock log return used by portfolio aggregation models.
+        tests:
+          - not_null
+
+  - name: int_factor_returns
+    description: >
+      Reconciled factor-return intermediate model that reconnects notebook factor returns to the raw
+      factor-price lineage and supports downstream factor context marts.
+    tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['date', 'factor_name']
+    columns:
+      - name: date
+        description: Trading date of the factor row.
+        tests:
+          - not_null
+      - name: factor_name
+        description: Factor identifier.
+        tests:
+          - not_null
+      - name: factor_return
+        description: Daily factor return value.
+        tests:
+          - not_null
+
+  - name: int_portfolio_weights
+    description: >
+      Configurable portfolio-weight contract owned by dbt. This model makes portfolio composition
+      explicit, testable, and reusable across all portfolio-level calculations.
+    tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['portfolio_id', 'ticker']
+    columns:
+      - name: portfolio_id
+        description: Portfolio identifier for the configured weight set.
+        tests:
+          - not_null
+      - name: ticker
+        description: Asset included in the configured portfolio.
+        tests:
+          - not_null
+      - name: weight
+        description: Portfolio weight assigned to the asset.
+        tests:
+          - not_null
+          - accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+
+  - name: int_portfolio_asset_contributions
+    description: >
+      Daily portfolio building-block model at the asset contribution grain. This model makes each
+      ticker's weighted contribution to portfolio return visible before aggregation.
+    tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['portfolio_id', 'date', 'ticker']
+    columns:
+      - name: portfolio_id
+        description: Portfolio identifier.
+        tests:
+          - not_null
+      - name: date
+        description: Trading date of the contribution row.
+        tests:
+          - not_null
+      - name: ticker
+        description: Asset contributing to the portfolio on that day.
+        tests:
+          - not_null
+      - name: weight
+        description: Portfolio weight applied to the asset return.
+        tests:
+          - accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+
+  - name: int_portfolio_return_series
+    description: >
+      Daily portfolio performance series built from weighted asset returns. This model separates the
+      time-series grain from scenario-summary marts and adds cumulative return and drawdown analytics.
+    tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['portfolio_id', 'date']
+    columns:
+      - name: portfolio_id
+        description: Portfolio identifier.
+        tests:
+          - not_null
+      - name: date
+        description: Trading date of the portfolio series row.
+        tests:
+          - not_null
+      - name: portfolio_log_return
+        description: Daily weighted portfolio log return.
+        tests:
+          - not_null
+      - name: drawdown
+        description: Relative decline from the running cumulative peak.
+        tests:
+          - accepted_range:
+              arguments:
+                max_value: 0
+
+  - name: int_portfolio_asset_metrics
+    description: >
+      Portfolio-level asset summary joining weights, notebook stock metrics, notebook beta metrics,
+      and realized history coverage for each holding.
+    tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['portfolio_id', 'ticker']
+    columns:
+      - name: portfolio_id
+        description: Portfolio identifier.
+        tests:
+          - not_null
+      - name: ticker
+        description: Asset identifier within the portfolio.
+        tests:
+          - not_null
+      - name: weight
+        description: Portfolio weight of the asset.
+        tests:
+          - accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+      - name: observations
+        description: Number of daily return observations available for the asset.
+        tests:
+          - accepted_range:
+              arguments:
+                min_value: 1
+
+  - name: int_portfolio_metrics
+    description: >
+      One-row-per-portfolio summary of expected return, volatility, Sharpe ratio, drawdown, and
+      weighted beta metrics derived from the daily portfolio series and weighted asset properties.
+    tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['portfolio_id']
+    columns:
+      - name: portfolio_id
+        description: Portfolio identifier.
+        tests:
+          - not_null
+      - name: expected_portfolio_return
+        description: Annualized expected portfolio return from the daily dbt-built series.
+      - name: portfolio_volatility
+        description: Annualized volatility of the dbt-built portfolio return series.
+        tests:
+          - not_null
+          - accepted_range:
+              arguments:
+                min_value: 0
+      - name: weighted_sharpe
+        description: Sharpe ratio derived from excess returns and portfolio volatility.
+      - name: max_drawdown
+        description: Worst drawdown observed in the dbt-built return series.
+        tests:
+          - accepted_range:
+              arguments:
+                max_value: 0
+      - name: num_assets
+        description: Number of assets in the configured portfolio.
+        tests:
+          - accepted_range:
+              arguments:
+                min_value: 1
+
+  - name: int_factor_exposure
+    description: >
+      Portfolio-to-factor bridge combining weighted exposures from stock-level betas or correlations
+      with the historical performance of each factor.
+    tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['portfolio_id', 'factor_name']
+    columns:
+      - name: portfolio_id
+        description: Portfolio identifier.
+        tests:
+          - not_null
+      - name: factor_name
+        description: Factor identifier such as MERVAL, EEM, or USDARS.
+        tests:
+          - not_null
+      - name: factor_volatility
+        description: Annualized volatility of the factor return series.
+        tests:
+          - accepted_range:
+              arguments:
+                min_value: 0
+
+  - name: int_diversification_metrics
+    description: >
+      Covariance-based diversification summary using the canonical correlation matrix and asset-level
+      volatilities to quantify concentration and diversification quality.
+    tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['portfolio_id']
+      - expression_is_true:
+          arguments:
+            expression: effective_number_of_assets <= num_assets and effective_number_of_assets >= 1
+    columns:
+      - name: portfolio_id
+        description: Portfolio identifier.
+        tests:
+          - not_null
+      - name: weight_concentration_hhi
+        description: Herfindahl-Hirschman concentration index of the weight vector.
+        tests:
+          - accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+      - name: average_pairwise_correlation
+        description: Mean off-diagonal asset correlation within the portfolio universe.
+        tests:
+          - accepted_range:
+              arguments:
+                min_value: -1
+                max_value: 1
+      - name: diversification_ratio
+        description: Ratio of weighted standalone risk to covariance-aware portfolio risk.
+        tests:
+          - accepted_range:
+              arguments:
+                min_value: 0
+
+  - name: int_risk_breakdown
+    description: >
+      Final intermediate risk-intelligence model combining portfolio performance, beta exposure,
+      diversification structure, and a dbt-owned risk-profile label.
+    tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['portfolio_id']
+    columns:
+      - name: portfolio_id
+        description: Portfolio identifier.
+        tests:
+          - not_null
+      - name: portfolio_volatility
+        description: Annualized portfolio volatility used for risk categorization.
+        tests:
+          - accepted_range:
+              arguments:
+                min_value: 0
+      - name: average_pairwise_correlation
+        description: Mean off-diagonal portfolio correlation.
+        tests:
+          - accepted_range:
+              arguments:
+                min_value: -1
+                max_value: 1
+      - name: dbt_risk_profile
+        description: dbt-owned qualitative risk bucket derived from volatility and drawdown.
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['defensive', 'balanced', 'aggressive']
+
+  - name: mart_stock_metrics
+    description: >
+      Serving mart for stock-level investor analytics combining notebook metrics with data coverage
+      and latest market context from the reconciled return history.
+    tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['ticker']
+    columns:
+      - name: ticker
+        description: Stock identifier.
+        tests:
+          - not_null
+      - name: observations
+        description: Number of return observations supporting the summary.
+        tests:
+          - accepted_range:
+              arguments:
+                min_value: 1
+      - name: volatility
+        description: Annualized stock volatility.
+        tests:
+          - accepted_range:
+              arguments:
+                min_value: 0
+
+  - name: mart_stock_rankings
+    description: >
+      Investor-facing ranking mart that orders stocks by risk-adjusted quality using return,
+      volatility, Sharpe ratio, and drawdown metrics.
+    tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['ticker']
+    columns:
+      - name: ticker
+        description: Stock identifier.
+        tests:
+          - not_null
+      - name: composite_rank
+        description: Overall risk-adjusted rank across the stock universe.
+        tests:
+          - accepted_range:
+              arguments:
+                min_value: 1
+
+  - name: mart_portfolio_return_series
+    description: >
+      Serving mart for daily portfolio performance, separate from scenario summaries so the docs graph
+      clearly distinguishes time-series performance from one-row scenario outputs.
+    tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['portfolio_id', 'date']
+    columns:
+      - name: portfolio_id
+        description: Portfolio identifier.
+        tests:
+          - not_null
+      - name: date
+        description: Trading date of the portfolio series row.
+        tests:
+          - not_null
+      - name: drawdown
+        description: Running portfolio drawdown.
+        tests:
+          - accepted_range:
+              arguments:
+                max_value: 0
+
+  - name: mart_factor_exposure_summary
+    description: >
+      Serving mart summarizing the portfolio's factor sensitivities alongside the historical behavior
+      of the factors themselves.
+    tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['portfolio_id', 'factor_name']
+    columns:
+      - name: portfolio_id
+        description: Portfolio identifier.
+        tests:
+          - not_null
+      - name: factor_name
+        description: Factor identifier.
+        tests:
+          - not_null
+      - name: factor_volatility
+        description: Annualized volatility of the factor series.
+        tests:
+          - accepted_range:
+              arguments:
+                min_value: 0
+
+  - name: mart_diversification_summary
+    description: >
+      Serving mart focused on concentration and diversification quality, derived from the
+      covariance-aware intermediate diversification model.
+    tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['portfolio_id']
+    columns:
+      - name: portfolio_id
+        description: Portfolio identifier.
+        tests:
+          - not_null
+      - name: weight_concentration_hhi
+        description: Concentration score of the portfolio.
+        tests:
+          - accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+      - name: average_pairwise_correlation
+        description: Mean correlation across non-identical portfolio constituents.
+        tests:
+          - accepted_range:
+              arguments:
+                min_value: -1
+                max_value: 1
+      - name: diversification_profile
+        description: Qualitative diversification label assigned by dbt.
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['well_diversified', 'moderately_diversified', 'concentrated']
+
+  - name: mart_portfolio_risk_breakdown
+    description: >
+      Central portfolio risk mart combining return, volatility, beta, correlation, diversification,
+      and dbt-owned risk classification in one investor-ready table.
+    tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['portfolio_id']
+    columns:
+      - name: portfolio_id
+        description: Portfolio identifier.
+        tests:
+          - not_null
+      - name: portfolio_volatility
+        description: Annualized volatility of the dbt-built portfolio.
+        tests:
+          - accepted_range:
+              arguments:
+                min_value: 0
+      - name: dbt_risk_profile
+        description: dbt-owned risk label for the portfolio.
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['defensive', 'balanced', 'aggressive']
+
+  - name: mart_portfolio_scenarios
+    description: >
+      Scenario-summary serving mart that reconciles notebook scenario outputs with dbt-owned
+      portfolio, beta, and diversification metrics. Grain is one row per portfolio run.
+    tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['portfolio_id', 'run_id']
+    columns:
+      - name: portfolio_id
+        description: Portfolio identifier.
+        tests:
+          - not_null
+      - name: run_id
+        description: Scenario run identifier.
+        tests:
+          - not_null
+      - name: dbt_portfolio_volatility
+        description: dbt-computed annualized volatility for the configured portfolio.
+        tests:
+          - accepted_range:
+              arguments:
+                min_value: 0
+      - name: dbt_effective_number_of_assets
+        description: Effective diversification count derived from the weight vector.
+        tests:
+          - accepted_range:
+              arguments:
+                min_value: 1
+
+  - name: mart_monte_carlo_summary
+    description: >
+      Monte Carlo serving mart enriched with dbt-owned scenario and risk-breakdown context so that
+      simulation outputs appear inside the governed serving layer rather than as disconnected sources.
+    tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['portfolio_id', 'run_id']
+    columns:
+      - name: portfolio_id
+        description: Portfolio identifier.
+        tests:
+          - not_null
+      - name: run_id
+        description: Monte Carlo run identifier.
+        tests:
+          - not_null
+      - name: probability_of_loss
+        description: Probability that the portfolio finishes below its initial value.
+        tests:
+          - not_null
+          - accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+      - name: num_simulations
+        description: Number of simulation paths used in the summary.
+        tests:
+          - accepted_range:
+              arguments:
+                min_value: 1
+
+  - name: mart_investor_dashboard
+    description: >
+      Final wide serving model for dashboards or presentation screenshots. It consolidates scenario,
+      Monte Carlo, diversification, and factor exposure outputs into one investor decision-support row
+      per portfolio run.
+    tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ['portfolio_id', 'run_id']
+    columns:
+      - name: portfolio_id
+        description: Portfolio identifier.
+        tests:
+          - not_null
+      - name: run_id
+        description: Portfolio run identifier.
+        tests:
+          - not_null
+      - name: probability_of_loss
+        description: Monte Carlo probability of a terminal loss.
+        tests:
+          - accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1

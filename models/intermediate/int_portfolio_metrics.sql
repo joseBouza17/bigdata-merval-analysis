@@ -1,55 +1,54 @@
--- Intermediate model: portfolio return series and summary metrics.
--- Uses configurable weights so the dbt layer stays aligned with the notebook scenario.
-
-{% set w_ggal = var('w_ggal', 0.25) %}
-{% set w_ypfd = var('w_ypfd', 0.25) %}
-{% set w_pamp = var('w_pamp', 0.20) %}
-{% set w_bma = var('w_bma', 0.15) %}
-{% set w_cepu = var('w_cepu', 0.15) %}
-
-with portfolio_weights as (
-    select 'GGAL.BA' as ticker, cast({{ w_ggal }} as float64) as weight
-    union all
-    select 'YPFD.BA' as ticker, cast({{ w_ypfd }} as float64) as weight
-    union all
-    select 'PAMP.BA' as ticker, cast({{ w_pamp }} as float64) as weight
-    union all
-    select 'BMA.BA' as ticker, cast({{ w_bma }} as float64) as weight
-    union all
-    select 'CEPU.BA' as ticker, cast({{ w_cepu }} as float64) as weight
-),
-selected_returns as (
+with return_series as (
     select
-        r.date,
-        r.ticker,
-        r.log_return,
-        w.weight
-    from {{ ref('stg_asset_returns') }} as r
-    inner join portfolio_weights as w
-        on r.ticker = w.ticker
-),
-daily_portfolio as (
-    select
+        portfolio_id,
         date,
-        sum(log_return * weight) as portfolio_return
-    from selected_returns
-    group by date
+        portfolio_log_return,
+        portfolio_excess_return,
+        drawdown,
+        cumulative_return
+    from {{ ref('int_portfolio_return_series') }}
 ),
-summary as (
+summary_metrics as (
     select
-        avg(portfolio_return) * 252 as expected_portfolio_return,
-        stddev(portfolio_return) * sqrt(252) as portfolio_volatility,
+        portfolio_id,
+        min(date) as start_date,
+        max(date) as end_date,
+        count(*) as observations,
+        avg(portfolio_log_return) * 252 as expected_portfolio_return,
+        stddev(portfolio_log_return) * sqrt(252) as portfolio_volatility,
         safe_divide(
-            avg(portfolio_return) * 252,
-            nullif(stddev(portfolio_return) * sqrt(252), 0)
-        ) as weighted_sharpe
-    from daily_portfolio
+            avg(portfolio_excess_return) * 252,
+            nullif(stddev(portfolio_log_return) * sqrt(252), 0)
+        ) as weighted_sharpe,
+        min(drawdown) as max_drawdown,
+        array_agg(cumulative_return order by date desc limit 1)[offset(0)] as total_cumulative_return
+    from return_series
+    group by portfolio_id
+),
+portfolio_exposures as (
+    select
+        portfolio_id,
+        count(*) as num_assets,
+        sum(weight * coalesce(beta_vs_merval, 0)) as weighted_beta_merval,
+        sum(weight * coalesce(beta_vs_eem, 0)) as weighted_beta_eem,
+        sum(weight * coalesce(notebook_volatility, realized_volatility, 0)) as weighted_average_asset_volatility
+    from {{ ref('int_portfolio_asset_metrics') }}
+    group by portfolio_id
 )
 select
-    d.date,
-    d.portfolio_return,
+    s.portfolio_id,
+    s.start_date,
+    s.end_date,
+    s.observations,
     s.expected_portfolio_return,
     s.portfolio_volatility,
-    s.weighted_sharpe
-from daily_portfolio as d
-cross join summary as s
+    s.weighted_sharpe,
+    s.max_drawdown,
+    s.total_cumulative_return,
+    e.num_assets,
+    e.weighted_beta_merval,
+    e.weighted_beta_eem,
+    e.weighted_average_asset_volatility
+from summary_metrics as s
+left join portfolio_exposures as e
+    on s.portfolio_id = e.portfolio_id
