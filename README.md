@@ -1,6 +1,6 @@
 # Argentina Portfolio Risk Intelligence Pipeline
 
-This project is a Big Data Technologies university assignment focused on Argentine equity and portfolio analytics. It combines Python notebooks, Google BigQuery, and dbt Core to ingest market data, engineer financial features, build portfolio intelligence models, and publish simulation-ready and dashboard-ready outputs. The result is a hybrid analytics pipeline that supports both quantitative research and warehouse governance through testing, documentation, lineage, and serving models.
+This project is a Big Data Technologies university assignment focused on Argentine equity and portfolio analytics. It combines Python notebooks, Google BigQuery, and dbt Core to ingest market data, engineer financial features, build portfolio intelligence models, and publish simulation-ready and dashboard-ready outputs. The result is a hybrid analytics pipeline that supports both quantitative research and warehouse governance through testing, documentation, lineage, and serving models, with a clear split between notebook-managed source datasets and dbt-managed transformation and serving datasets.
 
 ## 1. Project Overview
 
@@ -37,16 +37,16 @@ From a business and academic perspective, the project demonstrates how warehouse
 This repository uses a hybrid architecture:
 
 - Python notebooks handle ingestion, feature engineering, and simulation-heavy analytics.
-- BigQuery acts as the warehouse for raw, processed, and analytics data.
-- dbt Core manages transformation logic, data quality testing, documentation, lineage, and serving models.
+- BigQuery acts as the warehouse for notebook-managed source data and dbt-managed transformation and serving data.
+- dbt Core manages transformation logic, data quality testing, documentation, lineage, and serving models in dedicated dbt-owned datasets.
 
 Plain-language workflow:
 
-`market data -> Python notebooks -> BigQuery raw layer -> notebook processed tables -> dbt staging -> dbt intermediate models -> dbt marts / serving layer -> Monte Carlo-enriched outputs -> charts, docs, and academic deliverables`
+`market data -> Python notebooks -> BigQuery raw_market / processed_market / analytics_market -> dbt_processed_market -> serving_market -> charts, docs, and academic deliverables`
 
 ### Text Pipeline
 
-`yfinance + factor proxies -> Python ETL notebook -> BigQuery raw_market / processed_market -> dbt staging / intermediate / marts -> Python analytics notebook -> analytics_market -> dbt serving marts -> charts, docs, report inputs`
+`yfinance + factor proxies -> Python ETL notebook -> raw_market / processed_market -> Python analytics notebook -> analytics_market -> dbt_processed_market -> serving_market -> charts, docs, report inputs`
 
 ### Mermaid Diagram
 
@@ -55,14 +55,13 @@ flowchart LR
     A[Market and Factor Data Sources] --> B[Python ETL Notebook]
     B --> C[BigQuery raw_market]
     B --> D[BigQuery processed_market]
-    C --> E[dbt Staging Models]
-    D --> E
-    E --> F[dbt Intermediate Models]
-    F --> G[dbt Marts and Serving Models]
     D --> H[Python Portfolio and Monte Carlo Notebook]
     H --> I[BigQuery analytics_market]
-    I --> J[dbt Analytics Staging Models]
-    J --> G
+    C --> E[dbt_processed_market staging]
+    D --> E
+    I --> E
+    E --> F[dbt_processed_market intermediate]
+    F --> G[serving_market marts]
     G --> K[dbt Docs, Lineage, Tests]
     G --> L[Charts, Report, Presentation Assets]
 ```
@@ -143,10 +142,10 @@ bigdata-merval-analysis/
 | --- | --- | --- | --- |
 | `README.md` | Project guide | Explains architecture, workflow, tools, and deliverables | First reference for professors, teammates, and reviewers |
 | `requirements.txt` | Python dependency list | Defines notebook and dbt package requirements | Makes the environment reproducible |
-| `dbt_project.yml` | dbt project configuration | Declares model paths, materializations, schemas, and dbt behavior | Controls how the transformation layer is built |
+| `dbt_project.yml` | dbt project configuration | Declares model paths, materializations, vars, and the dbt-owned target datasets `dbt_processed_market` and `serving_market` | Controls how the transformation layer is built |
 | `profiles.yml` | dbt connection profile template | Points dbt to the BigQuery project, dataset, and auth method | Required for dbt to connect to the warehouse |
-| `merval_analysis.ipynb` | ETL and feature-engineering notebook | Ingests raw data, engineers processed financial tables, and uploads them to BigQuery | Starts the warehouse lifecycle |
-| `02_transform_serve_montecarlo.ipynb` | Analytics and serving notebook | Reads processed BigQuery inputs, builds portfolio analytics, runs Monte Carlo simulation, and writes analytics tables | Produces the right-side analytics outputs |
+| `merval_analysis.ipynb` | ETL and feature-engineering notebook | Ingests raw data, engineers processed financial tables, and uploads them to BigQuery with schema-evolution and rerun-safe `run_id` append logic | Starts the warehouse lifecycle |
+| `02_transform_serve_montecarlo.ipynb` | Analytics and serving notebook | Reads processed BigQuery inputs, builds portfolio analytics, runs Monte Carlo simulation, and writes analytics tables using a stable `portfolio_id` and rerun-safe `run_id` append logic | Produces the right-side analytics outputs |
 
 ### dbt Metadata Files
 
@@ -197,7 +196,7 @@ This project contains two major notebooks that should be run in sequence.
 - Pipeline stage: ingestion and feature engineering
 - Main purpose: collect and prepare stock and factor data for warehouse use
 
-This notebook ingests Argentine stock history and factor proxies such as MERVAL, USDARS, VIX, EEM, and risk-free-style signals. It computes processed financial outputs such as returns, stock metrics, beta metrics, and correlation data, then uploads both raw and processed tables into BigQuery.
+This notebook ingests Argentine stock history and factor proxies such as MERVAL, USDARS, VIX, EEM, and risk-free-style signals. It computes processed financial outputs such as returns, stock metrics, beta metrics, and correlation data, then uploads both raw and processed tables into BigQuery. For append-based writes that contain `run_id`, the notebook now deletes existing rows for the same `run_id` before re-uploading, which makes reruns safer.
 
 Key outputs from this notebook are `raw_market.stock_prices`, `raw_market.factor_prices`, `processed_market.asset_returns`, `processed_market.factor_returns`, `processed_market.stock_metrics`, `processed_market.beta_metrics`, and `processed_market.correlation_matrix_long`.
 
@@ -206,13 +205,13 @@ Key outputs from this notebook are `raw_market.stock_prices`, `raw_market.factor
 - Pipeline stage: analytics, simulation, and analytics-layer publication
 - Main purpose: read processed BigQuery inputs, build portfolio analytics, and generate Monte Carlo outputs
 
-This notebook validates processed BigQuery inputs, computes portfolio-level return and risk summaries, classifies portfolio profiles, runs Monte Carlo simulation, calculates metrics such as probability of loss, VaR, and CVaR, writes analytics tables back to BigQuery, and produces charts for the final report.
+This notebook validates processed BigQuery inputs, computes portfolio-level return and risk summaries, classifies portfolio profiles, runs Monte Carlo simulation, calculates metrics such as probability of loss, VaR, and CVaR, writes analytics tables back to BigQuery, and produces charts for the final report. It uses a stable portfolio identifier, `argentina_demo_portfolio`, together with a changing `run_id`, so dbt can join notebook analytics back to dbt-derived portfolio models consistently.
 
 Key outputs from this notebook are `analytics_market.portfolio_scenarios`, `analytics_market.monte_carlo_summary`, and the chart files stored in `outputs/charts/`.
 
 ## 8. Data Layers and Warehouse Design
 
-The warehouse is organized into three conceptual layers.
+The warehouse is organized into five practical layers.
 
 ### Raw Layer
 
@@ -250,6 +249,32 @@ Examples:
 
 This layer is important because it allows the project to preserve notebook-based quantitative work while still making dbt the owner of final serving logic, testing, and documentation.
 
+### dbt Transformation Layer
+
+The dbt transformation layer stores standardized views and reusable business logic in a dbt-owned dataset.
+
+Examples:
+
+- `dbt_processed_market.stg_stock_prices`
+- `dbt_processed_market.stg_stock_metrics`
+- `dbt_processed_market.int_portfolio_metrics`
+- `dbt_processed_market.int_risk_breakdown`
+
+This layer exists so notebook-produced source tables remain separate from governed warehouse transformations.
+
+### dbt Serving Layer
+
+The dbt serving layer stores final marts for reporting, documentation screenshots, and downstream consumption.
+
+Examples:
+
+- `serving_market.mart_stock_rankings`
+- `serving_market.mart_portfolio_risk_breakdown`
+- `serving_market.mart_monte_carlo_summary`
+- `serving_market.mart_investor_dashboard`
+
+This is the final investor-facing layer of the warehouse.
+
 ## 9. dbt Workflow
 
 dbt is the warehouse transformation and governance layer of the project.
@@ -268,6 +293,11 @@ dbt is the warehouse transformation and governance layer of the project.
 | Staging models | Standardize and clean source contracts from raw and notebook-produced tables |
 | Intermediate models | Build reusable business logic such as asset returns, portfolio weights, factor exposure, diversification, and risk breakdown |
 | Mart models | Publish final serving outputs such as stock rankings, portfolio scenarios, Monte Carlo summaries, and dashboard-ready tables |
+
+In BigQuery, those dbt models are materialized into:
+
+- `dbt_processed_market` for staging and intermediate models
+- `serving_market` for final marts
 
 ### What the Lineage Graph Represents
 
@@ -290,8 +320,16 @@ It is used to:
 - store raw market and factor data
 - store notebook-produced processed financial outputs
 - store notebook-produced analytics outputs
-- host dbt-managed staging, intermediate, and mart models
+- host dbt-managed staging, intermediate, and mart models in separate governed datasets
 - provide a warehouse backbone for documentation, testing, and serving
+
+The practical ownership split is:
+
+- `raw_market`, `processed_market`, `analytics_market`: notebook-managed source layers
+- `dbt_processed_market`: dbt-managed transformation layer
+- `serving_market`: dbt-managed serving layer
+
+Earlier dbt builds may have created legacy datasets such as `raw_market_processed_market` and `raw_market_analytics_market`. Those can be removed once the project has been rebuilt successfully into `dbt_processed_market` and `serving_market`.
 
 Without BigQuery, the project would remain notebook-centric. With BigQuery, it becomes a proper warehouse-backed analytics pipeline.
 
@@ -331,7 +369,8 @@ Representative warehouse outputs include:
 - raw market tables
 - processed return and metric tables
 - analytics scenario and simulation tables
-- dbt-built intermediate and mart tables
+- dbt-built intermediate tables in `dbt_processed_market`
+- dbt-built serving marts in `serving_market`
 
 ### dbt Serving Models
 
@@ -431,6 +470,13 @@ Then run:
 
 This order matters because the second notebook depends on processed tables created by the first.
 
+The notebooks currently use:
+
+- `portfolio_id = argentina_demo_portfolio`
+- `run_id = unique execution identifier`
+
+That design keeps portfolio joins stable across Python and dbt while still preserving run history.
+
 ### 5. Run dbt
 
 If using a dedicated dbt environment:
@@ -464,12 +510,14 @@ dbt build --profiles-dir .
 dbt docs generate --profiles-dir .
 ```
 
+If you are refreshing notebook analytics after structural changes, clean `analytics_market` first or remove old historical rows that were written before the stable `portfolio_id` and rerun-safe upload fixes.
+
 ## 15. Project Strengths and Limitations
 
 ### Strengths
 
 - Clear hybrid architecture that separates notebook-heavy computation from warehouse transformation governance
-- Layered BigQuery design with raw, processed, and analytics source layers
+- Layered BigQuery design with notebook-owned source datasets and dbt-owned transformation / serving datasets
 - Strong dbt lineage and documentation for academic review
 - Business-rule tests for financial and portfolio logic
 - Investor-oriented outputs rather than only exploratory notebook analysis
@@ -479,9 +527,10 @@ dbt docs generate --profiles-dir .
 
 - Some upstream processed and analytics tables are notebook-dependent rather than fully dbt-generated
 - Data coverage is limited to the selected assets and factor proxies used in the assignment
-- Portfolio weights are currently configured through dbt vars rather than a fully dynamic portfolio-input table
+- Portfolio weights and the demo portfolio definition are currently configured through dbt vars rather than a fully dynamic portfolio-input table
 - Simulation assumptions are simplified compared with institutional-grade risk engines
 - The project does not yet include a live dashboard or automated scheduled orchestration
+- Historical notebook rows created before the stable `portfolio_id` and rerun-safe upload fixes may require one-time cleanup
 
 ### Future Improvements
 
@@ -505,6 +554,11 @@ It demonstrates:
 - lineage through the dbt graph
 - data quality through generic and singular tests
 - analytics value creation through portfolio metrics, simulation outputs, and dashboard-ready marts
+
+It also demonstrates a clear ownership model:
+
+- notebooks produce source datasets and simulation-heavy outputs
+- dbt produces governed transformation and serving datasets
 
 In academic terms, the project is not just a notebook analysis. It is a full transformation-and-serving pipeline that combines engineering structure with financial analytics.
 

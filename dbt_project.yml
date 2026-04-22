@@ -16,6 +16,14 @@ clean-targets:
   - target
   - dbt_packages
 
+vars:
+  portfolio_id: argentina_demo_portfolio
+  w_ggal: 0.25
+  w_ypfd: 0.25
+  w_pamp: 0.20
+  w_bma: 0.15
+  w_cepu: 0.15
+
 models:
   merval_argentina_dbt:
     +materialized: view
@@ -23,10 +31,10 @@ models:
       relation: true
       columns: true
     staging:
-      +schema: processed_market
+      +schema: dbt_processed_market
     intermediate:
-      +schema: processed_market
+      +schema: dbt_processed_market
       +materialized: table
     marts:
-      +schema: analytics_market
+      +schema: serving_market
       +materialized: table

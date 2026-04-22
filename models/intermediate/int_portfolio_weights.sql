@@ -1,4 +1,4 @@
-{% set portfolio_id = var('portfolio_id', 'portfolio_dbt_default') %}
+{% set portfolio_id = var('portfolio_id', 'argentina_demo_portfolio') %}
 {% set w_ggal = var('w_ggal', 0.25) %}
 {% set w_ypfd = var('w_ypfd', 0.25) %}
 {% set w_pamp = var('w_pamp', 0.20) %}
