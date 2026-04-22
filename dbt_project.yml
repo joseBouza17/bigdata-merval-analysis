@@ -38,3 +38,4 @@ models:
     marts:
       +schema: serving_market
       +materialized: table
+      +tags: ["serving"]

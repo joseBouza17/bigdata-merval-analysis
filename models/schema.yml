@@ -26,6 +26,8 @@ models:
   - name: stg_factor_prices
     description: >
       Standardized and deduplicated factor-price staging model over raw macro and benchmark market data.
+    config:
+      tags: ['factor']
     tests:
       - unique_combination_of_columns:
           arguments:
@@ -70,6 +72,8 @@ models:
     description: >
       Staged factor-return table with consistent factor naming and numeric typing for downstream
       factor summaries and exposure marts.
+    config:
+      tags: ['factor']
     tests:
       - unique_combination_of_columns:
           arguments:
@@ -216,6 +220,8 @@ models:
   - name: stg_monte_carlo_summary
     description: >
       Staged Monte Carlo simulation output with consistent typing for downside-risk and scenario-summary marts.
+    config:
+      tags: ['simulation']
     tests:
       - unique_combination_of_columns:
           arguments:
@@ -270,6 +276,8 @@ models:
     description: >
       Reconciled factor-return intermediate model that reconnects notebook factor returns to the raw
       factor-price lineage and supports downstream factor context marts.
+    config:
+      tags: ['factor']
     tests:
       - unique_combination_of_columns:
           arguments:
@@ -292,6 +300,8 @@ models:
     description: >
       Configurable portfolio-weight contract owned by dbt. This model makes portfolio composition
       explicit, testable, and reusable across all portfolio-level calculations.
+    config:
+      tags: ['portfolio']
     tests:
       - unique_combination_of_columns:
           arguments:
@@ -318,6 +328,8 @@ models:
     description: >
       Daily portfolio building-block model at the asset contribution grain. This model makes each
       ticker's weighted contribution to portfolio return visible before aggregation.
+    config:
+      tags: ['portfolio']
     tests:
       - unique_combination_of_columns:
           arguments:
@@ -347,6 +359,8 @@ models:
     description: >
       Daily portfolio performance series built from weighted asset returns. This model separates the
       time-series grain from scenario-summary marts and adds cumulative return and drawdown analytics.
+    config:
+      tags: ['portfolio']
     tests:
       - unique_combination_of_columns:
           arguments:
@@ -375,6 +389,8 @@ models:
     description: >
       Portfolio-level asset summary joining weights, notebook stock metrics, notebook beta metrics,
       and realized history coverage for each holding.
+    config:
+      tags: ['portfolio']
     tests:
       - unique_combination_of_columns:
           arguments:
@@ -406,6 +422,8 @@ models:
     description: >
       One-row-per-portfolio summary of expected return, volatility, Sharpe ratio, drawdown, and
       weighted beta metrics derived from the daily portfolio series and weighted asset properties.
+    config:
+      tags: ['portfolio']
     tests:
       - unique_combination_of_columns:
           arguments:
@@ -443,6 +461,8 @@ models:
     description: >
       Portfolio-to-factor bridge combining weighted exposures from stock-level betas or correlations
       with the historical performance of each factor.
+    config:
+      tags: ['factor']
     tests:
       - unique_combination_of_columns:
           arguments:
@@ -467,6 +487,8 @@ models:
     description: >
       Covariance-based diversification summary using the canonical correlation matrix and asset-level
       volatilities to quantify concentration and diversification quality.
+    config:
+      tags: ['risk']
     tests:
       - unique_combination_of_columns:
           arguments:
@@ -504,6 +526,8 @@ models:
     description: >
       Final intermediate risk-intelligence model combining portfolio performance, beta exposure,
       diversification structure, and a dbt-owned risk-profile label.
+    config:
+      tags: ['risk']
     tests:
       - unique_combination_of_columns:
           arguments:
@@ -583,6 +607,8 @@ models:
     description: >
       Serving mart for daily portfolio performance, separate from scenario summaries so the docs graph
       clearly distinguishes time-series performance from one-row scenario outputs.
+    config:
+      tags: ['portfolio']
     tests:
       - unique_combination_of_columns:
           arguments:
@@ -607,6 +633,8 @@ models:
     description: >
       Serving mart summarizing the portfolio's factor sensitivities alongside the historical behavior
       of the factors themselves.
+    config:
+      tags: ['factor']
     tests:
       - unique_combination_of_columns:
           arguments:
@@ -631,6 +659,8 @@ models:
     description: >
       Serving mart focused on concentration and diversification quality, derived from the
       covariance-aware intermediate diversification model.
+    config:
+      tags: ['risk']
     tests:
       - unique_combination_of_columns:
           arguments:
@@ -665,6 +695,8 @@ models:
     description: >
       Central portfolio risk mart combining return, volatility, beta, correlation, diversification,
       and dbt-owned risk classification in one investor-ready table.
+    config:
+      tags: ['portfolio', 'risk']
     tests:
       - unique_combination_of_columns:
           arguments:
@@ -691,6 +723,8 @@ models:
     description: >
       Scenario-summary serving mart that reconciles notebook scenario outputs with dbt-owned
       portfolio, beta, and diversification metrics. Grain is one row per portfolio run.
+    config:
+      tags: ['portfolio']
     tests:
       - unique_combination_of_columns:
           arguments:
@@ -721,6 +755,8 @@ models:
     description: >
       Monte Carlo serving mart enriched with dbt-owned scenario and risk-breakdown context so that
       simulation outputs appear inside the governed serving layer rather than as disconnected sources.
+    config:
+      tags: ['risk', 'simulation']
     tests:
       - unique_combination_of_columns:
           arguments:
@@ -754,6 +790,8 @@ models:
       Final wide serving model for dashboards or presentation screenshots. It consolidates scenario,
       Monte Carlo, diversification, and factor exposure outputs into one investor decision-support row
       per portfolio run.
+    config:
+      tags: ['portfolio']
     tests:
       - unique_combination_of_columns:
           arguments:
