@@ -7,6 +7,9 @@ select
     portfolio_volatility_from_covariance,
     diversification_ratio,
     case
+        -- These labels are presentation-friendly cutoffs for the report/dashboard.
+        -- They are deliberately simple heuristics derived from the diversification ratio
+        -- and average correlation, not estimated regime boundaries.
         when diversification_ratio >= 1.50 and average_pairwise_correlation <= 0.40 then 'well_diversified'
         when diversification_ratio >= 1.20 then 'moderately_diversified'
         else 'concentrated'

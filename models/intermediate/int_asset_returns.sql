@@ -1,4 +1,6 @@
 with processed_returns as (
+    -- The notebook-created processed table is the canonical source for derived
+    -- return features such as excess return and FX-adjusted return.
     select
         date,
         ticker,
@@ -17,6 +19,8 @@ with processed_returns as (
     from {{ ref('stg_asset_returns') }}
 ),
 raw_prices as (
+    -- Raw prices are retained for auditability and dashboard context even when
+    -- the processed layer already computed the return series we rely on.
     select
         date,
         ticker,
@@ -32,6 +36,9 @@ raw_prices as (
 select
     r.date,
     r.ticker,
+    -- Prefer the processed close used by the notebook when it exists so all
+    -- downstream metrics line up with the engineered return series. Fallback to
+    -- the raw close keeps the record usable if the processed close is null.
     coalesce(r.processed_close, p.raw_close) as close,
     p.raw_close,
     p.adj_close,

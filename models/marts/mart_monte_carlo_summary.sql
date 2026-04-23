@@ -1,4 +1,6 @@
 with monte_carlo as (
+    -- Monte Carlo outputs are run-specific notebook artifacts, so this CTE keeps
+    -- the raw simulation summary untouched before dbt enriches it.
     select
         portfolio_id,
         run_id,
@@ -21,6 +23,8 @@ with monte_carlo as (
     from {{ ref('stg_monte_carlo_summary') }}
 ),
 portfolio_context as (
+    -- Portfolio context is joined back in using run_id because the notebook can
+    -- produce multiple scenario snapshots for the same logical portfolio.
     select
         portfolio_id,
         run_id,
@@ -38,6 +42,8 @@ portfolio_context as (
     from {{ ref('mart_portfolio_scenarios') }}
 ),
 risk_breakdown as (
+    -- The risk profile is currently portfolio-level rather than run-level, so we
+    -- join it separately after the run-specific scenario context is attached.
     select
         portfolio_id,
         dbt_risk_profile

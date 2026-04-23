@@ -1,4 +1,6 @@
 with return_history as (
+    -- Add the observation window and latest market levels so the final stock
+    -- metrics table can support both ranking and report/dashboard annotation.
     select
         ticker,
         count(*) as observations,
@@ -29,6 +31,7 @@ enriched_metrics as (
         rh.latest_adj_close,
         rh.latest_volume
     from {{ ref('stg_stock_metrics') }} as sm
+    -- Prefer the metrics export as the primary source and only backfill missing betas.
     left join {{ ref('stg_beta_metrics') }} as bm
         on sm.ticker = bm.ticker
     left join return_history as rh

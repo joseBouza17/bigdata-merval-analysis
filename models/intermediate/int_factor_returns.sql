@@ -1,4 +1,6 @@
 with processed_factor_returns as (
+    -- The processed factor table carries the daily factor return already aligned
+    -- to the notebook's financial logic, so it is the primary source here.
     select
         date,
         factor_name,
@@ -7,6 +9,8 @@ with processed_factor_returns as (
     from {{ ref('stg_factor_returns') }}
 ),
 raw_factor_prices as (
+    -- Raw factor values are kept as a traceable fallback and to preserve context
+    -- such as the country-risk proxy that is not re-derived in dbt.
     select
         date,
         factor_name,
@@ -17,6 +21,8 @@ raw_factor_prices as (
 select
     fr.date,
     fr.factor_name,
+    -- Using the processed factor value when present keeps the level series
+    -- consistent with the engineered daily returns used elsewhere.
     coalesce(fr.factor_value, fp.raw_factor_value) as factor_value,
     fp.raw_factor_value,
     fp.country_risk_proxy,

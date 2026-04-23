@@ -1,3 +1,5 @@
+-- Keep weights parameterized as dbt vars so the same project can be rerun
+-- for different portfolio mixes without rewriting the SQL model itself.
 {% set portfolio_id = var('portfolio_id', 'argentina_demo_portfolio') %}
 {% set w_ggal = var('w_ggal', 0.25) %}
 {% set w_ypfd = var('w_ypfd', 0.25) %}
@@ -21,4 +23,7 @@ select
     ticker,
     weight
 from weights
+-- Zero-weight names are excluded so downstream joins only expand active holdings.
+-- The portfolio weight singular test is responsible for validating that the kept
+-- weights still sum to 1.
 where weight > 0

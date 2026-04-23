@@ -21,6 +21,8 @@ diversification as (
     from {{ ref('int_diversification_metrics') }}
 ),
 factor_pivot as (
+    -- Factor exposures are stored in a tidy long format upstream; pivoting them
+    -- here produces one wide row per portfolio for serving and classification.
     select
         portfolio_id,
         max(case when factor_name = 'MERVAL' then weighted_exposure end) as exposure_merval,
@@ -47,6 +49,9 @@ select
     f.exposure_eem,
     f.exposure_usdars,
     case
+        -- These buckets are heuristic investor-profile labels rather than
+        -- statistically fitted classes. Volatility and max drawdown are used
+        -- together so deep downside episodes can still flag an aggressive profile.
         when m.portfolio_volatility >= 0.60 or m.max_drawdown <= -0.40 then 'aggressive'
         when m.portfolio_volatility >= 0.35 or m.max_drawdown <= -0.25 then 'balanced'
         else 'defensive'

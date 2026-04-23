@@ -20,6 +20,9 @@ diversification as (
     from {{ ref('mart_diversification_summary') }}
 ),
 scenario_source as (
+    -- Keep the notebook scenario snapshot alongside dbt-derived metrics so the
+    -- final mart can both serve the dashboard and expose any parity gaps between
+    -- the notebook analytics and the warehouse rebuild.
     select
         portfolio_id,
         run_id,
@@ -38,6 +41,8 @@ scenario_source as (
     from {{ ref('stg_portfolio_scenarios') }}
 )
 select
+    -- If no notebook scenario exists, the row still survives as a dbt-only view.
+    -- The synthetic run_id makes that distinction explicit in downstream outputs.
     coalesce(s.portfolio_id, d.portfolio_id) as portfolio_id,
     coalesce(s.run_id, 'dbt_derived') as run_id,
     s.notebook_generated_at,
@@ -61,6 +66,8 @@ select
     div.effective_number_of_assets as dbt_effective_number_of_assets,
     div.average_pairwise_correlation as dbt_average_pairwise_correlation,
     div.diversification_ratio as dbt_diversification_ratio,
+    -- Gap fields are kept for validation: they show how closely the dbt rebuild
+    -- matches the notebook outputs that originally wrote the analytics tables.
     d.expected_portfolio_return - s.notebook_expected_portfolio_return as expected_return_gap,
     d.portfolio_volatility - s.notebook_portfolio_volatility as volatility_gap,
     d.weighted_sharpe - s.notebook_weighted_sharpe as sharpe_gap,

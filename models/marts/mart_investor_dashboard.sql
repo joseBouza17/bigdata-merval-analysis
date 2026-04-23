@@ -1,4 +1,6 @@
 with factor_pivot as (
+    -- Factor exposures are pivoted to a wide format because the final dashboard
+    -- needs one portfolio row with explicit MERVAL, EEM, and FX columns.
     select
         portfolio_id,
         max(case when factor_name = 'MERVAL' then weighted_exposure end) as factor_exposure_merval,
@@ -32,9 +34,12 @@ select
     f.factor_exposure_eem,
     f.factor_exposure_usdars
 from {{ ref('mart_portfolio_scenarios') }} as s
+-- Simulation results are run-specific, so they are matched on both portfolio_id and run_id.
 left join {{ ref('mart_monte_carlo_summary') }} as m
     on s.portfolio_id = m.portfolio_id
    and s.run_id = m.run_id
+-- Diversification and factor exposures are derived from the current portfolio mix,
+-- so they are stable at the portfolio_id level and do not depend on notebook run_id.
 left join {{ ref('mart_diversification_summary') }} as d
     on s.portfolio_id = d.portfolio_id
 left join factor_pivot as f
