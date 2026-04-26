@@ -278,6 +278,24 @@ def _lookup_series(frame: pd.DataFrame, column_name: str, index: pd.Index) -> pd
     return frame.reindex(index)[column_name].astype("float64")
 
 
+def _rank_score(series: pd.Series, higher_is_better: bool = True) -> pd.Series:
+    """Convert a metric into a 0-1 rank score where 1 is best."""
+    values = pd.to_numeric(series, errors="coerce")
+    scores = values.rank(method="average", pct=True, ascending=higher_is_better)
+    return scores.fillna(0.0).astype("float64")
+
+
+def _score_within_horizon(
+    frame: pd.DataFrame,
+    column_name: str,
+    higher_is_better: bool = True,
+) -> pd.Series:
+    """Rank a metric within each horizon so different horizons are not mixed directly."""
+    return frame.groupby("horizon_name", group_keys=False)[column_name].transform(
+        lambda series: _rank_score(series, higher_is_better=higher_is_better)
+    )
+
+
 def compute_portfolio_contributions(
     returns_window: pd.DataFrame,
     weights: pd.Series,
@@ -384,7 +402,10 @@ def evaluate_portfolio(
         "concentration_risk_hhi": concentration_hhi(weights),
         "effective_number_of_assets": effective_number_of_assets(weights),
         "diversification_ratio": diversification_ratio(weights, covariance_matrix),
-        "diversification_effect": diversification_effect(weights, covariance_matrix),
+        "diversification_effect": annualize_volatility(
+            diversification_effect(weights, covariance_matrix),
+            trading_days,
+        ),
         "average_pairwise_correlation": avg_pairwise_correlation,
         "weighted_beta_merval": weighted_beta_merval,
         "weighted_beta_eem": weighted_beta_eem,
@@ -457,13 +478,13 @@ def classify_basket_horizon_profile(metric_row: pd.Series, simulation_row: pd.Se
 
 def _winner_reason(row: pd.Series) -> str:
     """Explain why one method won inside a basket-horizon cell."""
-    if row.get("probability_of_loss", np.nan) <= 0.30 and row.get("cvar_95", np.inf) <= 20:
-        return "Best downside resilience after horizon-specific optimization."
-    if row.get("expected_portfolio_return", -np.inf) >= 0.35:
-        return "Highest upside after applying no-short and max-weight constraints."
-    if row.get("diversification_ratio", -np.inf) >= 1.20:
-        return "Best diversification-adjusted trade-off for this horizon."
-    return "Best overall risk-adjusted trade-off for this horizon."
+    if row.get("tail_resilience_score", 0.0) >= 0.75 and row.get("risk_control_score", 0.0) >= 0.60:
+        return "Best downside resilience after balancing simulation tail risk and historical drawdown."
+    if row.get("return_score", 0.0) >= 0.75 and row.get("risk_adjusted_score", 0.0) >= 0.60:
+        return "Best upside profile after applying no-short and horizon-specific weight constraints."
+    if row.get("diversification_quality_score", 0.0) >= 0.75:
+        return "Best diversification and concentration trade-off for this basket-horizon cell."
+    return "Best balanced score across return quality, downside risk, and diversification."
 
 
 def build_method_comparison(metrics_df: pd.DataFrame, monte_carlo_df: pd.DataFrame) -> pd.DataFrame:
@@ -472,27 +493,72 @@ def build_method_comparison(metrics_df: pd.DataFrame, monte_carlo_df: pd.DataFra
         monte_carlo_df[
             [
                 "basket_horizon_id",
+                "initial_value",
                 "probability_of_loss",
                 "var_95",
                 "cvar_95",
                 "mean_final_value",
                 "median_final_value",
+                "expected_return_simulated",
+                "max_drawdown_p50",
+                "max_drawdown_p95",
             ]
         ],
         on="basket_horizon_id",
         how="left",
     )
 
-    # This scoring stays transparent enough to explain in a presentation.
-    comparison["selection_score"] = (
-        comparison["weighted_sharpe"].fillna(-10.0) * 3.0
-        + comparison["sortino_ratio"].fillna(0.0) * 1.0
-        + comparison["expected_portfolio_return"].fillna(0.0)
-        - comparison["portfolio_volatility"].fillna(0.0)
-        - comparison["probability_of_loss"].fillna(0.0)
-        - comparison["max_drawdown"].abs().fillna(0.0)
-        - comparison["concentration_risk_hhi"].fillna(0.0)
-        + comparison["diversification_ratio"].fillna(0.0) * 0.25
+    initial_value = pd.to_numeric(comparison["initial_value"], errors="coerce").replace(0, np.nan)
+    comparison["var_95_pct_of_initial"] = pd.to_numeric(
+        comparison["var_95"],
+        errors="coerce",
+    ) / initial_value
+    comparison["cvar_95_pct_of_initial"] = pd.to_numeric(
+        comparison["cvar_95"],
+        errors="coerce",
+    ) / initial_value
+    comparison["simulation_tail_drawdown_abs"] = pd.to_numeric(
+        comparison["max_drawdown_p95"],
+        errors="coerce",
+    ).abs()
+    comparison["historical_drawdown_abs"] = pd.to_numeric(
+        comparison["max_drawdown"],
+        errors="coerce",
+    ).abs()
+
+    sortino_score = _score_within_horizon(comparison, "sortino_ratio", higher_is_better=True)
+    sharpe_score = _score_within_horizon(comparison, "weighted_sharpe", higher_is_better=True)
+    comparison["risk_adjusted_score"] = sortino_score.where(
+        pd.to_numeric(comparison["sortino_ratio"], errors="coerce").notna(),
+        sharpe_score,
+    )
+    comparison["return_score"] = _score_within_horizon(
+        comparison,
+        "expected_portfolio_return",
+        higher_is_better=True,
+    )
+    comparison["risk_control_score"] = (
+        _score_within_horizon(comparison, "portfolio_volatility", higher_is_better=False) * 0.50
+        + _score_within_horizon(comparison, "historical_drawdown_abs", higher_is_better=False) * 0.50
+    )
+    comparison["tail_resilience_score"] = (
+        _score_within_horizon(comparison, "probability_of_loss", higher_is_better=False) * 0.40
+        + _score_within_horizon(comparison, "cvar_95_pct_of_initial", higher_is_better=False) * 0.40
+        + _score_within_horizon(comparison, "simulation_tail_drawdown_abs", higher_is_better=False)
+        * 0.20
+    )
+    comparison["diversification_quality_score"] = (
+        _score_within_horizon(comparison, "concentration_risk_hhi", higher_is_better=False) * 0.60
+        + _score_within_horizon(comparison, "diversification_ratio", higher_is_better=True) * 0.40
+    )
+
+    comparison["selection_score_version"] = "balanced_rank_v2"
+    comparison["selection_score"] = 100.0 * (
+        comparison["risk_adjusted_score"] * 0.30
+        + comparison["return_score"] * 0.15
+        + comparison["risk_control_score"] * 0.20
+        + comparison["tail_resilience_score"] * 0.20
+        + comparison["diversification_quality_score"] * 0.15
     )
 
     baseline = comparison[comparison["weighting_method"] == "equal_weight"][
@@ -582,30 +648,41 @@ def build_investor_recommendations(comparison_df: pd.DataFrame) -> pd.DataFrame:
 
     if not best_methods.empty:
         conservative = best_methods.sort_values(
-            by=["probability_of_loss", "cvar_95", "portfolio_volatility", "selection_score"],
-            ascending=[True, True, True, False],
+            by=[
+                "tail_resilience_score",
+                "risk_control_score",
+                "probability_of_loss",
+                "cvar_95_pct_of_initial",
+                "selection_score",
+            ],
+            ascending=[False, False, True, True, False],
         ).iloc[0]
         balanced = best_methods.sort_values(
-            by=["selection_score", "diversification_ratio", "weighted_sharpe"],
-            ascending=[False, False, False],
+            by=[
+                "selection_score",
+                "risk_adjusted_score",
+                "diversification_quality_score",
+                "tail_resilience_score",
+            ],
+            ascending=[False, False, False, False],
         ).iloc[0]
         aggressive = best_methods.sort_values(
-            by=["expected_portfolio_return", "weighted_sharpe", "selection_score"],
-            ascending=[False, False, False],
+            by=["return_score", "expected_portfolio_return", "risk_adjusted_score", "selection_score"],
+            ascending=[False, False, False, False],
         ).iloc[0]
 
         profile_map = {
             "conservative": (
                 conservative,
-                "Lowest downside probability after comparing all basket-horizon winners.",
+                "Strongest downside-resilience score after comparing basket-horizon winners.",
             ),
             "balanced": (
                 balanced,
-                "Best overall mix of Sharpe, diversification, and downside control.",
+                "Best balanced score across return quality, risk control, tail risk, and diversification.",
             ),
             "aggressive": (
                 aggressive,
-                "Highest upside expectation after optimization within realistic long-only constraints.",
+                "Highest upside score after optimization within long-only horizon constraints.",
             ),
         }
 
@@ -807,6 +884,22 @@ def build_metric_data_dictionary(run_id: str, ingestion_timestamp) -> pd.DataFra
             "definition": "95% Conditional Value at Risk based on the worst simulated tail.",
             "transformation_logic": "Initial value minus the average of final values at or below the 5th percentile.",
             "business_use": "Captures expected loss severity once the downside tail is hit.",
+        },
+        {
+            "table_name": f"analytics_market.{ANALYTICS_TABLES['basket_horizon_method_comparison']}",
+            "column_name": "selection_score",
+            "data_type": "FLOAT",
+            "definition": "Balanced 0-100 score used to choose the best method for each basket-horizon combination.",
+            "transformation_logic": "Weighted rank score within each horizon using return quality, risk control, tail resilience, and diversification components.",
+            "business_use": "Primary method-selection metric for identifying the best strategy and weights in each basket-horizon cell.",
+        },
+        {
+            "table_name": f"analytics_market.{ANALYTICS_TABLES['basket_horizon_method_comparison']}",
+            "column_name": "tail_resilience_score",
+            "data_type": "FLOAT",
+            "definition": "0-1 rank score summarizing downside simulation resilience.",
+            "transformation_logic": "Combines ranked probability of loss, CVaR as a share of initial value, and simulated tail drawdown.",
+            "business_use": "Separates downside and tail-risk quality from pure return or Sharpe performance.",
         },
         {
             "table_name": f"analytics_market.{ANALYTICS_TABLES['investor_recommendation_summary']}",

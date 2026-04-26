@@ -238,7 +238,24 @@ models:
       - name: basket_horizon_id
         tests: [not_null]
       - name: selection_score
-        tests: [not_null]
+        tests:
+          - not_null
+          - accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 100
+      - name: risk_adjusted_score
+        tests:
+          - accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+      - name: tail_resilience_score
+        tests:
+          - accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
 
   - name: stg_basket_horizon_contributions
     description: Asset-level return and risk contribution table written by Notebook 3.

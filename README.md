@@ -111,7 +111,7 @@ bigdata-merval-analysis/
 │   ├── portfolio_utils.py                # Metrics, optimization, classification
 │   ├── simulation_utils.py               # Monte Carlo simulation
 │   └── visualization_utils.py            # Chart generation
-├── models/                               # dbt models (staged for future use)
+├── models/                               # dbt staging, intermediate, and serving models
 │   ├── staging/
 │   ├── intermediate/
 │   └── marts/
@@ -119,9 +119,9 @@ bigdata-merval-analysis/
 ├── tests/                                # dbt tests (singular)
 ├── outputs/                              # Generated artifacts
 │   └── charts/
-│       ├── overview_heatmap.png
-│       ├── investor_profile_overview.png
-│       └── [basket-horizon fact sheets]
+│       ├── overview_basket_horizon_heatmap.png
+│       ├── overview_investor_profile_recommendations.png
+│       └── *_fact_sheet.png
 └── logs/                                 # dbt execution logs
 ```
 
@@ -223,6 +223,8 @@ bigdata-merval-analysis/
 - `analytics_market.basket_horizon_metrics` (15+ metrics per basket-horizon-method)
 - `analytics_market.basket_horizon_contributions` (return and risk contributions)
 - `analytics_market.monte_carlo_summary` (simulation metrics)
+- `analytics_market.basket_horizon_method_comparison` (balanced score and best strategy flags)
+- `analytics_market.investor_recommendation_summary` (horizon and investor-profile recommendations)
 - PNG charts saved to `outputs/charts/`
 
 **Key Analysis:**
@@ -232,9 +234,9 @@ bigdata-merval-analysis/
   - Maximum Sharpe Ratio
   - Minimum Volatility
   - Risk Parity
-- **Simulation:** 5,000 Monte Carlo paths per configuration to estimate VaR, CVaR, and probability of loss
-- **Risk Profiling:** Classify each configuration as conservative/balanced/aggressive based on volatility and Sharpe
-- **Investor Recommendations:** Rank methods by selection score and match investor profiles
+- **Simulation:** 2,000 Monte Carlo paths per configuration to estimate VaR, CVaR, and probability of loss
+- **Risk Profiling:** Classify each configuration with rule-based thresholds on volatility, beta, probability of loss, and FX sensitivity
+- **Investor Recommendations:** Rank methods with a balanced score across return quality, risk control, tail risk, and diversification
 
 **Run Time:** ~5-15 minutes (depends on simulation parameters)
 
@@ -247,17 +249,17 @@ Three investment baskets are defined in `src/config.py` with macro rationale:
 1. **Short-Term Tactical Basket**
    - Financials and energy-sensitive names
    - For tactical/high-beta positioning
-   - Tickers: GGAL, BMA, YPFD, EDN, TRAN, LOMA, BYMA
+   - Tickers: GGAL.BA, BMA.BA, YPFD.BA, EDN.BA, TRAN.BA
 
-2. **Medium-Term Structural Basket**
+2. **Medium-Term Balanced Basket**
    - Balanced exposure across sectors
    - For medium-horizon allocation
-   - Tickers: GGAL, CEPU, DISC, TRAN, BYMA, MIRG, CREO
+   - Tickers: PAMP.BA, CEPU.BA, BYMA.BA, TXAR.BA, BMA.BA
 
-3. **Long-Term Conservative Basket**
-   - Lower-beta, dividend-focused names
+3. **Long-Term Structural Basket**
+   - Energy infrastructure, utilities, market infrastructure, and materials names
    - For structural, long-horizon positioning
-   - Tickers: GGAL, CEPU, TRAN, MIRG, CREO
+   - Tickers: PAMP.BA, TGSU2.BA, CEPU.BA, BYMA.BA, TXAR.BA
 
 ### Horizons
 
@@ -278,12 +280,13 @@ Three investment horizons with matching time scales:
 
 ### Risk Classification
 
-Stocks are classified based on average return, volatility, and Sharpe ratio:
-- **Growth:** High return, moderate volatility, good Sharpe
-- **Balanced:** Moderate return and volatility, positive Sharpe
-- **Aggressive:** High return, high volatility, may have lower Sharpe
+Stocks are classified with rule-based thresholds on Sharpe ratio, volatility, beta, and average return:
+- **Conservative:** Sharpe at least 1.0 with volatility below 0.35
+- **Growth:** MERVAL beta above 1.2 with annualized average return above 0.20
+- **Aggressive:** Volatility above 0.45
+- **Balanced:** Fallback classification for stocks outside those thresholds
 
-Portfolio risk profiles (conservative/balanced/aggressive) are assigned based on resulting volatility and expected return.
+Portfolio risk profiles are assigned with rule-based thresholds on volatility, MERVAL beta, probability of loss, and FX sensitivity.
 
 ## 8. How to Run the Project
 
@@ -385,9 +388,9 @@ dbt docs serve --profiles-dir .
 ### Visualization Outputs
 
 Saved to `outputs/charts/`:
-- `overview_heatmap.png` – Sharpe ratio heatmap across 3×3 matrix
-- `investor_profile_overview.png` – Risk profiles and method rankings
-- `basket_horizon_fact_sheets/` – Detailed one-pagers per basket-horizon
+- `overview_basket_horizon_heatmap.png` – balanced selection-score heatmap across the 3×3 matrix
+- `overview_investor_profile_recommendations.png` – profile recommendations and method winners
+- `*_fact_sheet.png` – detailed one-pagers per basket-horizon
 
 ### Data Dictionary
 
