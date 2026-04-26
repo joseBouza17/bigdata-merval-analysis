@@ -1,3 +1,8 @@
+-- Input: raw_market.factor_prices
+-- Grain: one row per date and factor_name
+-- Purpose: standardize raw factor and macro proxy prices and keep the latest duplicate if the same factor-date pair is reloaded.
+-- Layer: staging
+
 with source_data as (
     select
         cast(date as date) as date,

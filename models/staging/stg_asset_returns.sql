@@ -1,3 +1,8 @@
+-- Input: processed_market.asset_returns
+-- Grain: one row per date and ticker
+-- Purpose: standardize processed stock return features used later in optimization, risk, and simulation work.
+-- Layer: staging
+
 with source_data as (
     select distinct
         cast(date as date) as date,
@@ -13,24 +18,12 @@ with source_data as (
         cast(risk_free_daily as float64) as risk_free_daily,
         cast(merval_usd_adjusted_return as float64) as merval_usd_adjusted_return,
         cast(inflation_proxy as float64) as inflation_proxy,
-        cast(country_risk_proxy as float64) as country_risk_proxy
+        cast(country_risk_proxy as float64) as country_risk_proxy,
+        cast(ingestion_timestamp as timestamp) as ingestion_timestamp,
+        cast(run_id as string) as run_id
     from {{ source('processed_market', 'asset_returns') }}
 )
-select
-    date,
-    ticker,
-    close,
-    log_return,
-    usd_adjusted_return,
-    excess_return,
-    merval_return,
-    eem_return,
-    vix_return,
-    usdars_return,
-    risk_free_daily,
-    merval_usd_adjusted_return,
-    inflation_proxy,
-    country_risk_proxy
+select *
 from source_data
 where date is not null
   and ticker is not null

@@ -1,6 +1,9 @@
+-- Input: stg_asset_returns and stg_stock_prices
+-- Grain: one row per date and ticker
+-- Purpose: reconcile processed returns back to the raw landed price history so downstream marts can carry both return features and raw price context.
+-- Layer: intermediate
+
 with processed_returns as (
-    -- The notebook-created processed table is the canonical source for derived
-    -- return features such as excess return and FX-adjusted return.
     select
         date,
         ticker,
@@ -15,12 +18,12 @@ with processed_returns as (
         risk_free_daily,
         merval_usd_adjusted_return,
         inflation_proxy,
-        country_risk_proxy
+        country_risk_proxy,
+        ingestion_timestamp,
+        run_id
     from {{ ref('stg_asset_returns') }}
 ),
 raw_prices as (
-    -- Raw prices are retained for auditability and dashboard context even when
-    -- the processed layer already computed the return series we rely on.
     select
         date,
         ticker,
@@ -29,24 +32,23 @@ raw_prices as (
         volume,
         currency,
         source,
-        ingestion_timestamp,
-        run_id
+        ingestion_timestamp as raw_ingestion_timestamp,
+        run_id as raw_run_id
     from {{ ref('stg_stock_prices') }}
 )
 select
     r.date,
     r.ticker,
-    -- Prefer the processed close used by the notebook when it exists so all
-    -- downstream metrics line up with the engineered return series. Fallback to
-    -- the raw close keeps the record usable if the processed close is null.
     coalesce(r.processed_close, p.raw_close) as close,
     p.raw_close,
     p.adj_close,
     p.volume,
     p.currency,
     p.source,
-    p.ingestion_timestamp,
-    p.run_id,
+    p.raw_ingestion_timestamp,
+    p.raw_run_id,
+    r.ingestion_timestamp,
+    r.run_id,
     r.log_return,
     r.usd_adjusted_return,
     r.excess_return,

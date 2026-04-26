@@ -1,7 +1,14 @@
+-- Input: analytics_market.monte_carlo_summary
+-- Grain: one row per basket_horizon_id
+-- Purpose: standardize the simulation summary layer used for downside comparison and investor recommendations.
+-- Layer: staging
+
 with source_data as (
     select distinct
-        cast(portfolio_id as string) as portfolio_id,
-        cast(run_id as string) as run_id,
+        lower(trim(cast(basket_horizon_id as string))) as basket_horizon_id,
+        lower(trim(cast(basket_name as string))) as basket_name,
+        lower(trim(cast(horizon_name as string))) as horizon_name,
+        lower(trim(cast(weighting_method as string))) as weighting_method,
         cast(initial_value as float64) as initial_value,
         cast(num_simulations as int64) as num_simulations,
         cast(simulation_days as int64) as simulation_days,
@@ -17,10 +24,12 @@ with source_data as (
         cast(expected_return_simulated as float64) as expected_return_simulated,
         cast(var_95 as float64) as var_95,
         cast(cvar_95 as float64) as cvar_95,
-        cast(ingestion_timestamp as timestamp) as ingestion_timestamp
+        cast(max_drawdown_p50 as float64) as max_drawdown_p50,
+        cast(max_drawdown_p95 as float64) as max_drawdown_p95,
+        cast(ingestion_timestamp as timestamp) as ingestion_timestamp,
+        cast(run_id as string) as run_id
     from {{ source('analytics_market', 'monte_carlo_summary') }}
 )
 select *
 from source_data
-where portfolio_id is not null
-  and run_id is not null
+where basket_horizon_id is not null

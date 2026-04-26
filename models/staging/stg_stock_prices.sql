@@ -1,3 +1,8 @@
+-- Input: raw_market.stock_prices
+-- Grain: one row per date and ticker
+-- Purpose: standardize raw equity prices and keep the latest duplicate if a rerun lands the same date-ticker pair.
+-- Layer: staging
+
 with source_data as (
     select
         cast(date as date) as date,
