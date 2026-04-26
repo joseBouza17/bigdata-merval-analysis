@@ -34,6 +34,8 @@ build/
 
 # Data and outputs
 data/
-output/
+outputs/
+charts/
 *.csv
 *.parquet
+*.png

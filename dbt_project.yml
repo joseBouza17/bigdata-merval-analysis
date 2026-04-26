@@ -17,12 +17,8 @@ clean-targets:
   - dbt_packages
 
 vars:
-  portfolio_id: argentina_demo_portfolio
-  w_ggal: 0.25
-  w_ypfd: 0.25
-  w_pamp: 0.20
-  w_bma: 0.15
-  w_cepu: 0.15
+  annualization_days: 252
+  confidence_level: 0.95
 
 models:
   merval_argentina_dbt:
@@ -32,10 +28,18 @@ models:
       columns: true
     staging:
       +schema: dbt_processed_market
+      +tags: ["staging"]
+      +meta:
+        layer_label: staging
     intermediate:
       +schema: dbt_processed_market
       +materialized: table
+      +tags: ["intermediate"]
+      +meta:
+        layer_label: intermediate
     marts:
       +schema: serving_market
       +materialized: table
       +tags: ["serving"]
+      +meta:
+        layer_label: serving
