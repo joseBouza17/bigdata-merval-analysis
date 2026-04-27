@@ -1,0 +1,444 @@
+version: 2
+
+models:
+  - name: stg_stock_prices
+    description: Standardized and deduplicated stock-price staging model.
+    config:
+      tags: ["staging"]
+      meta:
+        layer_label: staging
+    tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ["date", "ticker"]
+    columns:
+      - name: date
+        tests: [not_null]
+      - name: ticker
+        tests: [not_null]
+      - name: close
+        tests: [not_null]
+
+  - name: stg_factor_prices
+    description: Standardized and deduplicated factor-price staging model.
+    config:
+      tags: ["staging"]
+      meta:
+        layer_label: staging
+    tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ["date", "factor_name"]
+    columns:
+      - name: date
+        tests: [not_null]
+      - name: factor_name
+        tests: [not_null]
+      - name: factor_value
+        tests: [not_null]
+
+  - name: stg_asset_returns
+    description: Staged asset return table at the daily ticker grain.
+    config:
+      tags: ["staging", "metrics"]
+      meta:
+        layer_label: staging
+    tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ["date", "ticker"]
+    columns:
+      - name: date
+        tests: [not_null]
+      - name: ticker
+        tests: [not_null]
+      - name: log_return
+        tests: [not_null]
+
+  - name: stg_factor_returns
+    description: Staged factor return table at the daily factor grain.
+    config:
+      tags: ["staging", "risk"]
+      meta:
+        layer_label: staging
+    tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ["date", "factor_name"]
+    columns:
+      - name: date
+        tests: [not_null]
+      - name: factor_name
+        tests: [not_null]
+      - name: factor_return
+        tests: [not_null]
+
+  - name: stg_stock_metrics
+    description: Staged stock-level metrics used for basket analytics.
+    config:
+      tags: ["staging", "metrics", "risk"]
+      meta:
+        layer_label: staging
+    tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ["ticker"]
+    columns:
+      - name: ticker
+        tests: [not_null]
+      - name: volatility
+        tests:
+          - accepted_range:
+              arguments:
+                min_value: 0
+      - name: max_drawdown
+        tests:
+          - accepted_range:
+              arguments:
+                min_value: -1
+                max_value: 0
+
+  - name: stg_beta_metrics
+    description: Staged beta lookup used for weighted factor exposures.
+    config:
+      tags: ["staging", "risk"]
+      meta:
+        layer_label: staging
+    tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ["ticker"]
+    columns:
+      - name: ticker
+        tests: [not_null]
+
+  - name: stg_correlation_matrix
+    description: Canonicalized correlation matrix with one unordered pair per row.
+    config:
+      tags: ["staging", "risk"]
+      meta:
+        layer_label: staging
+    tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ["ticker_1", "ticker_2"]
+      - expression_is_true:
+          arguments:
+            expression: ticker_1 <= ticker_2
+    columns:
+      - name: ticker_1
+        tests: [not_null]
+      - name: ticker_2
+        tests: [not_null]
+      - name: correlation
+        tests:
+          - accepted_range:
+              arguments:
+                min_value: -1
+                max_value: 1
+
+  - name: stg_basket_definitions
+    description: Canonical basket membership table.
+    config:
+      tags: ["staging", "basket"]
+      meta:
+        layer_label: staging
+    tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ["basket_name", "ticker"]
+    columns:
+      - name: basket_name
+        tests: [not_null]
+      - name: ticker
+        tests: [not_null]
+
+  - name: stg_horizon_definitions
+    description: Canonical horizon definition table.
+    config:
+      tags: ["staging", "basket"]
+      meta:
+        layer_label: staging
+    tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ["horizon_name"]
+    columns:
+      - name: horizon_name
+        tests: [not_null]
+      - name: lookback_days
+        tests:
+          - accepted_range:
+              arguments:
+                min_value: 1
+      - name: simulation_days
+        tests:
+          - accepted_range:
+              arguments:
+                min_value: 1
+
+  - name: stg_basket_horizon_weights
+    description: Basket-horizon-method weights at the ticker grain.
+    config:
+      tags: ["staging", "basket", "metrics"]
+      meta:
+        layer_label: staging
+    tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ["basket_horizon_id", "ticker"]
+    columns:
+      - name: basket_horizon_id
+        tests: [not_null]
+      - name: ticker
+        tests: [not_null]
+      - name: weight
+        tests:
+          - accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+
+  - name: stg_basket_horizon_metrics
+    description: Historical basket-horizon metrics written by Notebook 3.
+    config:
+      tags: ["staging", "basket", "metrics", "risk"]
+      meta:
+        layer_label: staging
+    tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ["basket_horizon_id"]
+    columns:
+      - name: basket_horizon_id
+        tests: [not_null]
+      - name: portfolio_volatility
+        tests:
+          - accepted_range:
+              arguments:
+                min_value: 0
+      - name: concentration_risk_hhi
+        tests:
+          - accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+
+  - name: stg_basket_horizon_method_comparison
+    description: Ranked method comparison written by Notebook 3.
+    config:
+      tags: ["staging", "basket", "metrics"]
+      meta:
+        layer_label: staging
+    tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ["basket_horizon_id"]
+    columns:
+      - name: basket_horizon_id
+        tests: [not_null]
+      - name: selection_score
+        tests:
+          - not_null
+          - accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 100
+      - name: risk_adjusted_score
+        tests:
+          - accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+      - name: tail_resilience_score
+        tests:
+          - accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+
+  - name: stg_basket_horizon_contributions
+    description: Asset-level return and risk contribution table written by Notebook 3.
+    config:
+      tags: ["staging", "basket", "metrics", "risk"]
+      meta:
+        layer_label: staging
+    tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ["basket_horizon_id", "ticker"]
+    columns:
+      - name: basket_horizon_id
+        tests: [not_null]
+      - name: ticker
+        tests: [not_null]
+      - name: weight
+        tests:
+          - accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+
+  - name: stg_monte_carlo_summary
+    description: Monte Carlo summary written by Notebook 3.
+    config:
+      tags: ["staging", "simulation", "risk"]
+      meta:
+        layer_label: staging
+    tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ["basket_horizon_id"]
+    columns:
+      - name: basket_horizon_id
+        tests: [not_null]
+      - name: probability_of_loss
+        tests:
+          - accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+      - name: num_simulations
+        tests:
+          - accepted_range:
+              arguments:
+                min_value: 1
+
+  - name: stg_investor_recommendation_summary
+    description: Horizon winner and investor-profile recommendation table.
+    config:
+      tags: ["staging", "basket", "serving"]
+      meta:
+        layer_label: staging
+    tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ["recommendation_scope", "recommendation_key"]
+    columns:
+      - name: recommendation_scope
+        tests: [not_null]
+      - name: recommendation_key
+        tests: [not_null]
+      - name: basket_horizon_id
+        tests: [not_null]
+
+  - name: int_asset_returns
+    description: Reconciled asset-return model linking processed returns back to raw prices.
+    config:
+      tags: ["intermediate", "metrics"]
+      meta:
+        layer_label: intermediate
+    tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ["date", "ticker"]
+
+  - name: int_factor_returns
+    description: Reconciled factor-return model linking processed factors back to raw prices.
+    config:
+      tags: ["intermediate", "risk"]
+      meta:
+        layer_label: intermediate
+    tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ["date", "factor_name"]
+
+  - name: int_basket_universe
+    description: Basket constituents enriched with stock metrics and betas.
+    config:
+      tags: ["intermediate", "basket", "metrics"]
+      meta:
+        layer_label: intermediate
+    tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ["basket_name", "ticker"]
+
+  - name: int_basket_horizon_weights
+    description: Basket-horizon-method asset-level table enriched with metric context.
+    config:
+      tags: ["intermediate", "basket", "metrics"]
+      meta:
+        layer_label: intermediate
+    tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ["basket_horizon_id", "ticker"]
+
+  - name: int_basket_horizon_analytics
+    description: dbt-derived concentration, diversification, and exposure summary by basket-horizon-method.
+    config:
+      tags: ["intermediate", "basket", "metrics", "risk"]
+      meta:
+        layer_label: intermediate
+    tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ["basket_horizon_id"]
+      - expression_is_true:
+          arguments:
+            expression: dbt_effective_number_of_assets <= num_assets and dbt_effective_number_of_assets >= 1
+
+  - name: mart_stock_metrics
+    description: Final stock-level metrics mart.
+    config:
+      tags: ["serving", "metrics", "risk"]
+      meta:
+        layer_label: serving
+
+  - name: mart_basket_definitions
+    description: Final basket definition mart.
+    config:
+      tags: ["serving", "basket"]
+      meta:
+        layer_label: serving
+
+  - name: mart_horizon_definitions
+    description: Final horizon definition mart.
+    config:
+      tags: ["serving", "basket"]
+      meta:
+        layer_label: serving
+
+  - name: mart_basket_horizon_weights
+    description: Final basket-horizon weights mart.
+    config:
+      tags: ["serving", "basket", "metrics"]
+      meta:
+        layer_label: serving
+
+  - name: mart_basket_horizon_metrics
+    description: Final basket-horizon metrics mart.
+    config:
+      tags: ["serving", "basket", "metrics", "risk"]
+      meta:
+        layer_label: serving
+
+  - name: mart_basket_horizon_method_comparison
+    description: Final basket-horizon comparison mart.
+    config:
+      tags: ["serving", "basket", "metrics"]
+      meta:
+        layer_label: serving
+
+  - name: mart_basket_horizon_contributions
+    description: Final basket-horizon contribution mart.
+    config:
+      tags: ["serving", "basket", "metrics", "risk"]
+      meta:
+        layer_label: serving
+
+  - name: mart_monte_carlo_summary
+    description: Final Monte Carlo summary mart.
+    config:
+      tags: ["serving", "simulation", "risk"]
+      meta:
+        layer_label: serving
+
+  - name: mart_investor_recommendation_summary
+    description: Final investor recommendation mart.
+    config:
+      tags: ["serving", "basket"]
+      meta:
+        layer_label: serving

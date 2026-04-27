@@ -1,0 +1,143 @@
+version: 2
+
+sources:
+  - name: raw_market
+    schema: raw_market
+    description: Raw market landing layer written by Notebook 1.
+    config:
+      tags: ["source"]
+      meta:
+        layer_label: source
+    tables:
+      - name: stock_prices
+        description: Raw daily Argentine equity prices landed from Yahoo Finance.
+        config:
+          tags: ["source"]
+          meta:
+            layer_label: source
+      - name: factor_prices
+        description: Raw factor and proxy price levels landed from Yahoo Finance.
+        config:
+          tags: ["source"]
+          meta:
+            layer_label: source
+
+  - name: processed_market
+    schema: processed_market
+    description: Base and processed market feature layer written by Notebooks 1 and 2.
+    config:
+      tags: ["source", "metrics"]
+      meta:
+        layer_label: source
+    tables:
+      - name: base_stock_prices
+        description: Standardized stock-price base table for downstream feature engineering.
+        config:
+          tags: ["source"]
+          meta:
+            layer_label: source
+      - name: base_factor_prices
+        description: Standardized factor-price base table for downstream feature engineering.
+        config:
+          tags: ["source"]
+          meta:
+            layer_label: source
+      - name: asset_returns
+        description: Daily stock return features used for basket optimization and risk analytics.
+        config:
+          tags: ["source", "metrics"]
+          meta:
+            layer_label: source
+      - name: factor_returns
+        description: Daily factor return features used for beta and macro-risk context.
+        config:
+          tags: ["source", "risk"]
+          meta:
+            layer_label: source
+      - name: stock_metrics
+        description: Stock-level annualized performance and risk metrics.
+        config:
+          tags: ["source", "metrics", "risk"]
+          meta:
+            layer_label: source
+      - name: beta_metrics
+        description: Beta estimates against MERVAL and EEM.
+        config:
+          tags: ["source", "risk"]
+          meta:
+            layer_label: source
+      - name: correlation_matrix_long
+        description: Long-form pairwise correlation matrix across the equity universe.
+        config:
+          tags: ["source", "risk"]
+          meta:
+            layer_label: source
+
+  - name: analytics_market
+    schema: analytics_market
+    description: Basket-horizon analytics layer written by Notebook 3.
+    config:
+      tags: ["source", "basket"]
+      meta:
+        layer_label: source
+    tables:
+      - name: basket_definitions
+        description: Canonical basket membership, sector tags, and basket rationale.
+        config:
+          tags: ["source", "basket"]
+          meta:
+            layer_label: source
+      - name: horizon_definitions
+        description: Canonical horizon assumptions for lookback, evaluation, and simulation windows.
+        config:
+          tags: ["source", "basket"]
+          meta:
+            layer_label: source
+      - name: basket_horizon_weights
+        description: Optimized and equal-weight allocations by basket, horizon, and method.
+        config:
+          tags: ["source", "basket", "metrics"]
+          meta:
+            layer_label: source
+      - name: basket_horizon_metrics
+        description: Historical risk-return metrics for each basket-horizon-method combination.
+        config:
+          tags: ["source", "basket", "metrics", "risk"]
+          meta:
+            layer_label: source
+      - name: basket_horizon_method_comparison
+        description: Ranked comparison of weighting methods within each basket-horizon cell.
+        config:
+          tags: ["source", "basket", "metrics"]
+          meta:
+            layer_label: source
+      - name: basket_horizon_contributions
+        description: Asset-level contribution to return and contribution to risk by basket, horizon, and method.
+        config:
+          tags: ["source", "basket", "metrics", "risk"]
+          meta:
+            layer_label: source
+      - name: monte_carlo_paths
+        description: Sampled Monte Carlo paths stored for presentation and quality checks.
+        config:
+          tags: ["source", "simulation"]
+          meta:
+            layer_label: source
+      - name: monte_carlo_summary
+        description: Monte Carlo downside summary by basket, horizon, and weighting method.
+        config:
+          tags: ["source", "simulation", "risk"]
+          meta:
+            layer_label: source
+      - name: investor_recommendation_summary
+        description: Horizon winners and investor-profile recommendations.
+        config:
+          tags: ["source", "basket", "serving"]
+          meta:
+            layer_label: source
+      - name: metric_data_dictionary
+        description: Compact data dictionary covering the main processed and analytics outputs.
+        config:
+          tags: ["source", "metrics"]
+          meta:
+            layer_label: source

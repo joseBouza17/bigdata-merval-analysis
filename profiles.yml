@@ -1,0 +1,23 @@
+merval_argentina_profile:
+  target: dev_adc
+  outputs:
+    dev_adc:
+      type: bigquery
+      method: oauth
+      project: bigdata-financeargentina
+      dataset: raw_market
+      threads: 4
+      location: US
+      priority: interactive
+      timeout_seconds: 300
+
+    dev_service_account:
+      type: bigquery
+      method: service-account
+      project: bigdata-financeargentina
+      dataset: raw_market
+      threads: 4
+      location: US
+      keyfile: YOUR_SERVICE_ACCOUNT_JSON_PATH
+      priority: interactive
+      timeout_seconds: 300

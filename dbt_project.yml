@@ -1,0 +1,45 @@
+name: merval_argentina_dbt
+version: 1.0.0
+config-version: 2
+
+profile: merval_argentina_profile
+
+model-paths: ["models"]
+analysis-paths: ["analyses"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+
+target-path: target
+clean-targets:
+  - target
+  - dbt_packages
+
+vars:
+  annualization_days: 252
+  confidence_level: 0.95
+
+models:
+  merval_argentina_dbt:
+    +materialized: view
+    +persist_docs:
+      relation: true
+      columns: true
+    staging:
+      +schema: dbt_processed_market
+      +tags: ["staging"]
+      +meta:
+        layer_label: staging
+    intermediate:
+      +schema: dbt_processed_market
+      +materialized: table
+      +tags: ["intermediate"]
+      +meta:
+        layer_label: intermediate
+    marts:
+      +schema: serving_market
+      +materialized: table
+      +tags: ["serving"]
+      +meta:
+        layer_label: serving
